@@ -16,9 +16,8 @@
         .news-item { text-align: left; border-bottom: 1px solid #eee; padding: 15px 0; }
         .admin-item { background: #f9f9f9; padding: 10px; margin-top: 8px; border-radius: 6px; text-align: left; border: 1px solid #eee; }
         .admin-btns { display: flex; gap: 5px; margin-top: 5px; }
-        .btn-edit { background: #f39c12; flex: 1; padding: 5px; font-size: 12px; }
-        .btn-del { background: #e74c3c; flex: 1; padding: 5px; font-size: 12px; }
-        #cancel-edit { background: #95a5a6; margin-top: 5px; }
+        .btn-edit { background: #f39c12; flex: 1; padding: 5px; font-size: 12px; border: none; color: white; border-radius: 4px; cursor: pointer; }
+        .btn-del { background: #e74c3c; flex: 1; padding: 5px; font-size: 12px; border: none; color: white; border-radius: 4px; cursor: pointer; }
     </style>
 </head>
 <body>
@@ -42,15 +41,12 @@
     </div>
 
     <div id="section-admin" class="container hidden">
-        <h2 id="admin-title-label">Nowa wiadomość</h2>
-        <input type="text" id="post-title" placeholder="Tytuł posta">
+        <h2 id="admin-header">Nowa wiadomość</h2>
+        <input type="text" id="post-title" placeholder="Tytuł">
         <textarea id="post-content" rows="3" placeholder="Treść..."></textarea>
-        
-        <button id="btn-save" onclick="handleSave()">Opublikuj wiadomość</button>
-        <button id="cancel-edit" class="hidden" onclick="resetForm()">Anuluj edycję</button>
-        
-        <hr style="margin-top:20px">
-        <h4>Zarządzaj postami:</h4>
+        <button id="btn-save" onclick="handleSave()">Opublikuj</button>
+        <button id="btn-cancel" class="hidden" onclick="resetForm()" style="background:#95a5a6">Anuluj</button>
+        <hr style="margin: 20px 0;">
         <div id="admin-list"></div>
         <button onclick="location.reload()" style="background:#666; margin-top:20px">Wyloguj</button>
     </div>
@@ -58,13 +54,14 @@
     <script>
         const SB_URL = "https://ggiidtwcfpfqwhrsxqre.supabase.co";
         const SB_KEY = "sb_publishable_65C-SaTkrEhz5I3aAr76mg_R1ZEzsyI";
-        const supabaseClient = supabase.createClient(SB_URL, SB_KEY);
+        const sb = supabase.createClient(SB_URL, SB_KEY);
 
-        let editingId = null; // Przechowuje ID edytowanego posta
+        let editingTitle = null; // Używamy tytułu jako identyfikatora, bo nie masz kolumny ID
 
         async function loadData() {
             try {
-                const { data, error } = await supabaseClient.from('news').select('*').order('id', { ascending: false });
+                // POBIERAMY WSZYSTKO (bez sortowania po ID, bo go nie masz!)
+                const { data, error } = await sb.from('news').select('*');
                 if (error) throw error;
 
                 const userDiv = document.getElementById('news-container');
@@ -73,22 +70,22 @@
                 userDiv.innerHTML = data.length ? "" : "Brak wiadomości.";
                 adminDiv.innerHTML = "";
 
-                data.forEach(item => {
-                    // Widok użytkownika
+                // Odwracamy listę ręcznie, żeby najnowsze były na górze
+                data.reverse().forEach(item => {
                     userDiv.innerHTML += `<div class="news-item"><b>${item.title}</b><p>${item.content}</p></div>`;
                     
-                    // Widok admina
                     adminDiv.innerHTML += `
                         <div class="admin-item">
                             <b>${item.title}</b>
                             <div class="admin-btns">
-                                <button class="btn-edit" onclick="startEdit(${item.id}, '${item.title.replace(/'/g, "\\'")}', '${item.content.replace(/'/g, "\\'")}')">Edytuj</button>
-                                <button class="btn-del" onclick="delPost(${item.id})">Usuń</button>
+                                <button class="btn-edit" onclick="prepareEdit('${item.title.replace(/'/g, "\\'")}', '${item.content.replace(/'/g, "\\Source")}')">Edytuj</button>
+                                <button class="btn-del" onclick="deletePost('${item.title.replace(/'/g, "\\'")}')">Usuń</button>
                             </div>
                         </div>`;
                 });
             } catch (e) {
                 console.error(e);
+                document.getElementById('news-container').innerText = "Błąd połączenia.";
             }
         }
 
@@ -102,42 +99,41 @@
         async function handleSave() {
             const t = document.getElementById('post-title').value;
             const c = document.getElementById('post-content').value;
-            if(!t || !c) return alert("Wypełnij pola!");
+            if(!t || !c) return;
 
-            if (editingId) {
-                // EDYTOWANIE
-                await supabaseClient.from('news').update({ title: t, content: c }).eq('id', editingId);
+            if (editingTitle) {
+                // AKTUALIZACJA (szukamy po starym tytule)
+                await sb.from('news').update({ title: t, content: c }).eq('title', editingTitle);
             } else {
-                // DODAWANIE
-                await supabaseClient.from('news').insert([{ title: t, content: c }]);
+                // NOWY POST
+                await sb.from('news').insert([{ title: t, content: c }]);
             }
             
             resetForm();
             loadData();
         }
 
-        function startEdit(id, title, content) {
-            editingId = id;
+        function prepareEdit(title, content) {
+            editingTitle = title;
             document.getElementById('post-title').value = title;
             document.getElementById('post-content').value = content;
-            document.getElementById('btn-save').innerText = "Zaktualizuj post";
-            document.getElementById('admin-title-label').innerText = "Edytowanie posta";
-            document.getElementById('cancel-edit').classList.remove('hidden');
-            window.scrollTo(0, 0); // Przewiń do góry do formularza
+            document.getElementById('btn-save').innerText = "Zapisz zmiany";
+            document.getElementById('admin-header').innerText = "Edytujesz post";
+            document.getElementById('btn-cancel').classList.remove('hidden');
         }
 
         function resetForm() {
-            editingId = null;
+            editingTitle = null;
             document.getElementById('post-title').value = "";
             document.getElementById('post-content').value = "";
-            document.getElementById('btn-save').innerText = "Opublikuj wiadomość";
-            document.getElementById('admin-title-label').innerText = "Nowa wiadomość";
-            document.getElementById('cancel-edit').classList.add('hidden');
+            document.getElementById('btn-save').innerText = "Opublikuj";
+            document.getElementById('admin-header').innerText = "Nowa wiadomość";
+            document.getElementById('btn-cancel').classList.add('hidden');
         }
 
-        async function delPost(id) {
-            if (!confirm("Na pewno usunąć ten post?")) return;
-            await supabaseClient.from('news').delete().eq('id', id);
+        async function deletePost(title) {
+            if (!confirm("Usunąć post: " + title + "?")) return;
+            await sb.from('news').delete().eq('title', title);
             loadData();
         }
 
@@ -145,9 +141,9 @@
             document.querySelectorAll('.container').forEach(c => c.classList.add('hidden'));
             document.getElementById(id).classList.remove('hidden');
         }
-        
+
         setInterval(() => {
-            if(!document.getElementById('section-login').classList.contains('hidden')) loadData();
+            if (!document.getElementById('section-login').classList.contains('hidden')) loadData();
         }, 10000);
     </script>
 </body>
