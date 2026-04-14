@@ -1,21 +1,8 @@
 <!DOCTYPE html>
 <html lang="pl">
-
-<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-<script>
-    // --- TWOJE DANE Z SUPABASE ---
-    const SB_URL = "WKLEJ_TUTAJ_PROJECT_URL"; // np. https://xyz.supabase.co
-    const SB_KEY = "sb_publishable_65C-SaTkrEhz5I3aAr76mg_R1ZEzsyI"; // Twój klucz
-
-    // Inicjalizacja klienta
-    const supabaseClient = supabase.createClient(SB_URL, SB_KEY);
-
-    // Reszta kodu...
-</script>
-
-    
 <head>
     <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Supabase Global News</title>
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <style>
@@ -25,7 +12,8 @@
         .hidden { display: none; }
         input, textarea { width: 100%; margin: 5px 0; padding: 10px; box-sizing: border-box; }
         button { background: #3ecf8e; color: white; border: none; padding: 10px 20px; border-radius: 5px; cursor: pointer; font-weight: bold; }
-        button:disabled { background: #ccc; }
+        button:hover { background: #2fb479; }
+        #admin-news-list div { display: flex; justify-content: space-between; padding: 5px; background: #f9f9f9; margin-top: 5px; }
     </style>
 </head>
 <body>
@@ -34,12 +22,13 @@
     <h2>Hasło:</h2>
     <input type="password" id="i-pass">
     <button onclick="checkAuth()">Zaloguj</button>
-    <p id="l-timer" style="color:red"></p>
+    <p id="error-msg" style="color:red"></p>
 </div>
 
 <div id="s-user" class="container hidden">
     <h2>Aktualności</h2>
-    <div id="news-list"></div>
+    <div id="news-list">Ładowanie...</div>
+    <br><button onclick="location.reload()">Wyloguj</button>
 </div>
 
 <div id="s-admin" class="container hidden">
@@ -47,52 +36,77 @@
     <input type="text" id="an-t" placeholder="Tytuł">
     <textarea id="an-c" placeholder="Treść"></textarea>
     <button onclick="sendNews()">Opublikuj</button>
+    <hr>
+    <h4>Zarządzaj:</h4>
     <div id="admin-news-list"></div>
+    <br><button onclick="location.reload()">Wyloguj</button>
 </div>
 
 <script>
-    // --- KONFIGURACJA ---
-    const SB_URL = "TWÓJ_URL_Z_SUPABASE";
-    const SB_KEY = "TWÓJ_ANON_KEY_Z_SUPABASE";
-    const supabase = lib.supabase.createClient(SB_URL, SB_KEY);
-
-    let userIp = "";
+    // --- KONFIGURACJA (DANE Z TWOJEGO SCREENA) ---
+    const SB_URL = "https://ggiidtwcfpfqwhrsxqre.supabase.co";
+    const SB_KEY = "sb_publishable_65C-SaTkrEhz5I3aAr76mg_R1ZEzsyI";
+    
+    // NAPRAWA: Usunięto 'lib.', zostawiamy samo 'supabase'
+    const supabaseClient = supabase.createClient(SB_URL, SB_KEY);
 
     // Pobieranie danych
     async function loadData() {
-        // Newsy
-        const { data: news } = await supabase.from('news').select('*').order('created_at', { ascending: false });
+        const { data: news, error } = await supabaseClient
+            .from('news')
+            .select('*')
+            .order('id', { ascending: false });
+
+        if (error) {
+            console.error("Błąd bazy:", error);
+            return;
+        }
+
+        // Lista dla usera
         document.getElementById('news-list').innerHTML = news.map(n => `
             <div class="news-item"><h4>${n.title}</h4><p>${n.content}</p></div>
-        `).join('');
+        `).join('') || "Brak wiadomości.";
 
-        // Admin lista (uproszczona)
+        // Lista dla admina
         if (!document.getElementById('s-admin').classList.contains('hidden')) {
-             document.getElementById('admin-news-list').innerHTML = news.map(n => `
-                <div>${n.title} <button onclick="delNews(${n.id})">X</button></div>
+            document.getElementById('admin-news-list').innerHTML = news.map(n => `
+                <div>
+                    <span>${n.title}</span>
+                    <button style="background:red; padding:2px 5px;" onclick="delNews(${n.id})">X</button>
+                </div>
             `).join('');
         }
     }
 
-    async function checkAuth() {
+    function checkAuth() {
         const p = document.getElementById('i-pass').value;
-        if(p === "klucz") { show('s-user'); loadData(); }
-        else if(p === "administracyjny") { show('s-admin'); loadData(); }
-        else { handleWrong(); }
+        if (p === "klucz") {
+            show('s-user');
+            loadData();
+        } else if (p === "administracyjny") {
+            show('s-admin');
+            loadData();
+        } else {
+            document.getElementById('error-msg').innerText = "Błędne hasło!";
+        }
     }
 
     async function sendNews() {
         const t = document.getElementById('an-t').value;
         const c = document.getElementById('an-c').value;
-        await supabase.from('news').insert([{ title: t, content: c }]);
+        if (!t || !c) return alert("Wpisz coś!");
+
+        await supabaseClient.from('news').insert([{ title: t, content: c }]);
         document.getElementById('an-t').value = "";
         document.getElementById('an-c').value = "";
         loadData();
     }
 
     async function delNews(id) {
-        await supabase.from('news').delete().eq('id', id);
-        loadData();
+        if(confirm("Usunąć?")) {
+            await supabaseClient.from('news').delete().eq('id', id);
+            loadData();
+        }
     }
 
     function show(id) {
@@ -100,14 +114,11 @@
         document.getElementById(id).classList.remove('hidden');
     }
 
-    // Odświeżanie co 10 sek
-    setInterval(loadData, 10000);
-
-    window.onload = async () => {
-        const res = await fetch('https://api.ipify.org?format=json');
-        const d = await res.json();
-        userIp = d.ip;
-    };
+    // Automatyczne odświeżanie
+    setInterval(() => {
+        if (!document.getElementById('s-login').classList.contains('hidden')) return;
+        loadData();
+    }, 10000);
 </script>
 </body>
 </html>
