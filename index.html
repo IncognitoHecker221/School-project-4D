@@ -13,8 +13,12 @@
         .hidden { display: none; }
         input, textarea { width: 100%; padding: 12px; margin: 10px 0; border: 1px solid #ddd; border-radius: 6px; box-sizing: border-box; }
         button { background-color: #2d3e50; color: white; border: none; padding: 12px 25px; border-radius: 6px; cursor: pointer; font-weight: bold; width: 100%; margin-top: 10px; }
-        .news-item { text-align: left; border-bottom: 1px solid #eee; padding: 10px 0; }
-        .admin-item { display: flex; justify-content: space-between; align-items: center; background: #f9f9f9; padding: 8px; margin-top: 5px; border-radius: 4px; font-size: 14px; }
+        .news-item { text-align: left; border-bottom: 1px solid #eee; padding: 15px 0; }
+        .admin-item { background: #f9f9f9; padding: 10px; margin-top: 8px; border-radius: 6px; text-align: left; border: 1px solid #eee; }
+        .admin-btns { display: flex; gap: 5px; margin-top: 5px; }
+        .btn-edit { background: #f39c12; flex: 1; padding: 5px; font-size: 12px; }
+        .btn-del { background: #e74c3c; flex: 1; padding: 5px; font-size: 12px; }
+        #cancel-edit { background: #95a5a6; margin-top: 5px; }
     </style>
 </head>
 <body>
@@ -34,30 +38,33 @@
     <div id="section-user" class="container hidden">
         <h2>Aktualności</h2>
         <div id="news-container">Ładowanie...</div>
-        <button onclick="location.reload()">Wyloguj</button>
+        <button onclick="location.reload()" style="background:#666">Wyloguj</button>
     </div>
 
     <div id="section-admin" class="container hidden">
-        <h2>Panel Admina</h2>
+        <h2 id="admin-title-label">Nowa wiadomość</h2>
         <input type="text" id="post-title" placeholder="Tytuł posta">
         <textarea id="post-content" rows="3" placeholder="Treść..."></textarea>
-        <button onclick="publishNews()">Dodaj wiadomość</button>
-        <hr>
+        
+        <button id="btn-save" onclick="handleSave()">Opublikuj wiadomość</button>
+        <button id="cancel-edit" class="hidden" onclick="resetForm()">Anuluj edycję</button>
+        
+        <hr style="margin-top:20px">
+        <h4>Zarządzaj postami:</h4>
         <div id="admin-list"></div>
-        <button onclick="location.reload()" style="background:#666">Wyloguj</button>
+        <button onclick="location.reload()" style="background:#666; margin-top:20px">Wyloguj</button>
     </div>
 
     <script>
         const SB_URL = "https://ggiidtwcfpfqwhrsxqre.supabase.co";
         const SB_KEY = "sb_publishable_65C-SaTkrEhz5I3aAr76mg_R1ZEzsyI";
-        // Poprawna inicjalizacja
         const supabaseClient = supabase.createClient(SB_URL, SB_KEY);
+
+        let editingId = null; // Przechowuje ID edytowanego posta
 
         async function loadData() {
             try {
-                // Pobieranie bez wymuszania kolejności (bezpieczniejsze na start)
-                const { data, error } = await supabaseClient.from('news').select('*');
-                
+                const { data, error } = await supabaseClient.from('news').select('*').order('id', { ascending: false });
                 if (error) throw error;
 
                 const userDiv = document.getElementById('news-container');
@@ -67,15 +74,20 @@
                 adminDiv.innerHTML = "";
 
                 data.forEach(item => {
+                    // Widok użytkownika
                     userDiv.innerHTML += `<div class="news-item"><b>${item.title}</b><p>${item.content}</p></div>`;
+                    
+                    // Widok admina
                     adminDiv.innerHTML += `
                         <div class="admin-item">
-                            <span>${item.title}</span>
-                            <button onclick="delPost(${item.id})" style="width:auto; background:red; padding:2px 8px; margin:0;">X</button>
+                            <b>${item.title}</b>
+                            <div class="admin-btns">
+                                <button class="btn-edit" onclick="startEdit(${item.id}, '${item.title.replace(/'/g, "\\'")}', '${item.content.replace(/'/g, "\\'")}')">Edytuj</button>
+                                <button class="btn-del" onclick="delPost(${item.id})">Usuń</button>
+                            </div>
                         </div>`;
                 });
             } catch (e) {
-                document.getElementById('news-container').innerText = "Błąd bazy danych.";
                 console.error(e);
             }
         }
@@ -87,21 +99,44 @@
             else { document.getElementById('error-msg').innerText = "Błędne hasło!"; }
         }
 
-        async function publishNews() {
+        async function handleSave() {
             const t = document.getElementById('post-title').value;
             const c = document.getElementById('post-content').value;
-            if(!t || !c) return;
-            
-            const { error } = await supabaseClient.from('news').insert([{ title: t, content: c }]);
-            if(error) alert("Błąd zapisu!");
-            else {
-                document.getElementById('post-title').value = "";
-                document.getElementById('post-content').value = "";
-                loadData();
+            if(!t || !c) return alert("Wypełnij pola!");
+
+            if (editingId) {
+                // EDYTOWANIE
+                await supabaseClient.from('news').update({ title: t, content: c }).eq('id', editingId);
+            } else {
+                // DODAWANIE
+                await supabaseClient.from('news').insert([{ title: t, content: c }]);
             }
+            
+            resetForm();
+            loadData();
+        }
+
+        function startEdit(id, title, content) {
+            editingId = id;
+            document.getElementById('post-title').value = title;
+            document.getElementById('post-content').value = content;
+            document.getElementById('btn-save').innerText = "Zaktualizuj post";
+            document.getElementById('admin-title-label').innerText = "Edytowanie posta";
+            document.getElementById('cancel-edit').classList.remove('hidden');
+            window.scrollTo(0, 0); // Przewiń do góry do formularza
+        }
+
+        function resetForm() {
+            editingId = null;
+            document.getElementById('post-title').value = "";
+            document.getElementById('post-content').value = "";
+            document.getElementById('btn-save').innerText = "Opublikuj wiadomość";
+            document.getElementById('admin-title-label').innerText = "Nowa wiadomość";
+            document.getElementById('cancel-edit').classList.add('hidden');
         }
 
         async function delPost(id) {
+            if (!confirm("Na pewno usunąć ten post?")) return;
             await supabaseClient.from('news').delete().eq('id', id);
             loadData();
         }
@@ -111,7 +146,6 @@
             document.getElementById(id).classList.remove('hidden');
         }
         
-        // Auto-odświeżanie
         setInterval(() => {
             if(!document.getElementById('section-login').classList.contains('hidden')) loadData();
         }, 10000);
