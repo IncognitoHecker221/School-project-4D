@@ -6,16 +6,15 @@
     <title>System Wiadomości SP24</title>
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <style>
-        /* Twoje style z flagami i układem */
-        body { font-family: sans-serif; background-color: #f0f2f5; margin: 0; display: flex; justify-content: center; align-items: center; min-height: 100vh; position: relative; }
+        body { font-family: sans-serif; background-color: #f0f2f5; margin: 0; display: flex; justify-content: center; align-items: center; min-height: 100vh; }
         .flags { position: absolute; top: 20px; right: 20px; display: flex; gap: 10px; }
-        .flag { width: 30px; height: 20px; border: 1px solid #ccc; cursor: pointer; }
-        .container { background-color: white; padding: 40px; border-radius: 12px; box-shadow: 0 4px 20px rgba(0,0,0,0.1); width: 100%; max-width: 400px; text-align: center; }
+        .flag { width: 30px; border: 1px solid #ccc; cursor: pointer; }
+        .container { background: white; padding: 40px; border-radius: 12px; box-shadow: 0 4px 20px rgba(0,0,0,0.1); width: 100%; max-width: 400px; text-align: center; }
         .hidden { display: none; }
         input, textarea { width: 100%; padding: 12px; margin: 10px 0; border: 1px solid #ddd; border-radius: 6px; box-sizing: border-box; }
-        button { background-color: #2d3e50; color: white; border: none; padding: 12px 25px; border-radius: 6px; cursor: pointer; font-weight: bold; width: 100%; }
+        button { background-color: #2d3e50; color: white; border: none; padding: 12px 25px; border-radius: 6px; cursor: pointer; font-weight: bold; width: 100%; margin-top: 10px; }
         .news-item { text-align: left; border-bottom: 1px solid #eee; padding: 10px 0; }
-        #admin-list div { display: flex; justify-content: space-between; padding: 5px; background: #f9f9f9; margin-top: 5px; border-radius: 4px; }
+        .admin-item { display: flex; justify-content: space-between; align-items: center; background: #f9f9f9; padding: 8px; margin-top: 5px; border-radius: 4px; font-size: 14px; }
     </style>
 </head>
 <body>
@@ -26,97 +25,95 @@
     </div>
 
     <div id="section-login" class="container">
-        <h2 id="text-login-header">Podaj hasło:</h2>
+        <h2>Podaj hasło:</h2>
         <input type="password" id="password-input">
-        <button onclick="checkAuth()" id="text-login-btn">Zatwierdź</button>
+        <button onclick="checkAuth()">Zatwierdź</button>
         <p id="error-msg" style="color: red;"></p>
     </div>
 
     <div id="section-user" class="container hidden">
-        <h2 id="text-user-header">Aktualności</h2>
+        <h2>Aktualności</h2>
         <div id="news-container">Ładowanie...</div>
-        <br>
         <button onclick="location.reload()">Wyloguj</button>
     </div>
 
     <div id="section-admin" class="container hidden">
         <h2>Panel Admina</h2>
-        <input type="text" id="post-title" placeholder="Tytuł">
-        <textarea id="post-content" placeholder="Treść"></textarea>
-        <button onclick="publishNews()">Opublikuj</button>
+        <input type="text" id="post-title" placeholder="Tytuł posta">
+        <textarea id="post-content" rows="3" placeholder="Treść..."></textarea>
+        <button onclick="publishNews()">Dodaj wiadomość</button>
         <hr>
         <div id="admin-list"></div>
-        <br>
-        <button onclick="location.reload()">Wyloguj</button>
+        <button onclick="location.reload()" style="background:#666">Wyloguj</button>
     </div>
 
     <script>
-        // --- POŁĄCZENIE Z TWOIM SUPABASE ---
         const SB_URL = "https://ggiidtwcfpfqwhrsxqre.supabase.co";
         const SB_KEY = "sb_publishable_65C-SaTkrEhz5I3aAr76mg_R1ZEzsyI";
-        const sb = supabase.createClient(SB_URL, SB_KEY);
+        // Poprawna inicjalizacja
+        const supabaseClient = supabase.createClient(SB_URL, SB_KEY);
 
-        function checkAuth() {
-            const pass = document.getElementById('password-input').value;
-            if (pass === "klucz") {
-                show('section-user');
-                loadData();
-            } else if (pass === "administracyjny") {
-                show('section-admin');
-                loadData();
-            } else {
-                document.getElementById('error-msg').innerText = "Błędne hasło!";
+        async function loadData() {
+            try {
+                // Pobieranie bez wymuszania kolejności (bezpieczniejsze na start)
+                const { data, error } = await supabaseClient.from('news').select('*');
+                
+                if (error) throw error;
+
+                const userDiv = document.getElementById('news-container');
+                const adminDiv = document.getElementById('admin-list');
+                
+                userDiv.innerHTML = data.length ? "" : "Brak wiadomości.";
+                adminDiv.innerHTML = "";
+
+                data.forEach(item => {
+                    userDiv.innerHTML += `<div class="news-item"><b>${item.title}</b><p>${item.content}</p></div>`;
+                    adminDiv.innerHTML += `
+                        <div class="admin-item">
+                            <span>${item.title}</span>
+                            <button onclick="delPost(${item.id})" style="width:auto; background:red; padding:2px 8px; margin:0;">X</button>
+                        </div>`;
+                });
+            } catch (e) {
+                document.getElementById('news-container').innerText = "Błąd bazy danych.";
+                console.error(e);
             }
         }
 
-        async function loadData() {
-            // Pobieranie danych z tabeli 'news'
-            const { data, error } = await sb.from('news').select('*').order('id', { ascending: false });
-            
-            if (error) {
-                console.log("Błąd:", error);
-                document.getElementById('news-container').innerText = "Błąd bazy. Sprawdź tabelę i RLS!";
-                return;
-            }
-
-            const userList = document.getElementById('news-container');
-            const adminList = document.getElementById('admin-list');
-            
-            userList.innerHTML = data.length ? "" : "Brak postów.";
-            adminList.innerHTML = "";
-
-            data.forEach(item => {
-                userList.innerHTML += `<div class="news-item"><b>${item.title}</b><p>${item.content}</p></div>`;
-                adminList.innerHTML += `<div><span>${item.title}</span><button onclick="delPost(${item.id})" style="width:auto; background:red; padding:2px 5px;">X</button></div>`;
-            });
+        function checkAuth() {
+            const p = document.getElementById('password-input').value;
+            if (p === "klucz") { show('section-user'); loadData(); }
+            else if (p === "administracyjny") { show('section-admin'); loadData(); }
+            else { document.getElementById('error-msg').innerText = "Błędne hasło!"; }
         }
 
         async function publishNews() {
             const t = document.getElementById('post-title').value;
             const c = document.getElementById('post-content').value;
-            if (!t || !c) return;
-
-            await sb.from('news').insert([{ title: t, content: c }]);
-            document.getElementById('post-title').value = "";
-            document.getElementById('post-content').value = "";
-            loadData();
+            if(!t || !c) return;
+            
+            const { error } = await supabaseClient.from('news').insert([{ title: t, content: c }]);
+            if(error) alert("Błąd zapisu!");
+            else {
+                document.getElementById('post-title').value = "";
+                document.getElementById('post-content').value = "";
+                loadData();
+            }
         }
 
         async function delPost(id) {
-            await sb.from('news').delete().eq('id', id);
+            await supabaseClient.from('news').delete().eq('id', id);
             loadData();
         }
 
         function show(id) {
-            document.getElementById('section-login').classList.add('hidden');
-            document.getElementById('section-user').classList.add('hidden');
-            document.getElementById('section-admin').classList.add('hidden');
+            document.querySelectorAll('.container').forEach(c => c.classList.add('hidden'));
             document.getElementById(id).classList.remove('hidden');
         }
-
-        // Odświeżanie co 10 sekund
+        
+        // Auto-odświeżanie
         setInterval(() => {
-            if (document.getElementById('section-login').classList.contains('hidden')) loadData();
+            if(!document.getElementById('section-login').classList.contains('hidden')) loadData();
         }, 10000);
     </script>
 </body>
