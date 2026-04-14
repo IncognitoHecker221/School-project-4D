@@ -6,146 +6,117 @@
     <title>System Wiadomości SP24</title>
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <style>
-        body { font-family: 'Segoe UI', sans-serif; background-color: #f0f2f5; display: flex; justify-content: center; align-items: center; min-height: 100vh; margin: 0; }
-        .container { background: white; padding: 30px; border-radius: 12px; box-shadow: 0 4px 20px rgba(0,0,0,0.1); width: 90%; max-width: 450px; text-align: center; }
+        /* Twoje style z flagami i układem */
+        body { font-family: sans-serif; background-color: #f0f2f5; margin: 0; display: flex; justify-content: center; align-items: center; min-height: 100vh; position: relative; }
+        .flags { position: absolute; top: 20px; right: 20px; display: flex; gap: 10px; }
+        .flag { width: 30px; height: 20px; border: 1px solid #ccc; cursor: pointer; }
+        .container { background-color: white; padding: 40px; border-radius: 12px; box-shadow: 0 4px 20px rgba(0,0,0,0.1); width: 100%; max-width: 400px; text-align: center; }
         .hidden { display: none; }
         input, textarea { width: 100%; padding: 12px; margin: 10px 0; border: 1px solid #ddd; border-radius: 6px; box-sizing: border-box; }
-        button { background-color: #3ecf8e; color: white; border: none; padding: 12px 25px; border-radius: 6px; cursor: pointer; font-weight: bold; width: 100%; }
-        button:hover { background-color: #34b27b; }
-        .news-item { text-align: left; border-bottom: 1px solid #eee; padding: 15px 0; }
-        .news-item h4 { margin: 0 0 5px 0; color: #1a252f; }
-        .news-item p { margin: 0; color: #444; }
-        #admin-news-list div { display: flex; justify-content: space-between; background: #f9f9f9; padding: 10px; margin: 5px 0; border-radius: 4px; align-items: center; }
-        .del-btn { background: #ff4d4d; width: auto; padding: 5px 10px; }
+        button { background-color: #2d3e50; color: white; border: none; padding: 12px 25px; border-radius: 6px; cursor: pointer; font-weight: bold; width: 100%; }
+        .news-item { text-align: left; border-bottom: 1px solid #eee; padding: 10px 0; }
+        #admin-list div { display: flex; justify-content: space-between; padding: 5px; background: #f9f9f9; margin-top: 5px; border-radius: 4px; }
     </style>
 </head>
 <body>
 
-    <div id="s-login" class="container">
-        <h2>System SP24</h2>
-        <input type="password" id="i-pass" placeholder="Podaj hasło...">
-        <button onclick="checkAuth()">Zaloguj</button>
-        <p id="error-msg" style="color:red; margin-top:10px;"></p>
+    <div class="flags">
+        <img src="https://upload.wikimedia.org/wikipedia/en/1/12/Flag_of_Poland.svg" class="flag" alt="PL">
+        <img src="https://upload.wikimedia.org/wikipedia/commons/4/49/Flag_of_Ukraine.svg" class="flag" alt="UA">
     </div>
 
-    <div id="s-user" class="container hidden">
-        <h2>Aktualności</h2>
-        <div id="news-list">Ładowanie wiadomości...</div>
+    <div id="section-login" class="container">
+        <h2 id="text-login-header">Podaj hasło:</h2>
+        <input type="password" id="password-input">
+        <button onclick="checkAuth()" id="text-login-btn">Zatwierdź</button>
+        <p id="error-msg" style="color: red;"></p>
+    </div>
+
+    <div id="section-user" class="container hidden">
+        <h2 id="text-user-header">Aktualności</h2>
+        <div id="news-container">Ładowanie...</div>
         <br>
-        <button style="background:#666" onclick="location.reload()">Wyloguj</button>
+        <button onclick="location.reload()">Wyloguj</button>
     </div>
 
-    <div id="s-admin" class="container hidden">
+    <div id="section-admin" class="container hidden">
         <h2>Panel Admina</h2>
-        <input type="text" id="an-t" placeholder="Tytuł posta">
-        <textarea id="an-c" rows="4" placeholder="Treść posta..."></textarea>
-        <button onclick="sendNews()">Opublikuj wiadomość</button>
+        <input type="text" id="post-title" placeholder="Tytuł">
+        <textarea id="post-content" placeholder="Treść"></textarea>
+        <button onclick="publishNews()">Opublikuj</button>
         <hr>
-        <h4>Zarządzaj postami:</h4>
-        <div id="admin-news-list"></div>
+        <div id="admin-list"></div>
         <br>
-        <button style="background:#666" onclick="location.reload()">Wyloguj</button>
+        <button onclick="location.reload()">Wyloguj</button>
     </div>
 
     <script>
-        // --- TWOJA KONFIGURACJA ---
+        // --- POŁĄCZENIE Z TWOIM SUPABASE ---
         const SB_URL = "https://ggiidtwcfpfqwhrsxqre.supabase.co";
         const SB_KEY = "sb_publishable_65C-SaTkrEhz5I3aAr76mg_R1ZEzsyI";
-        
-        // Inicjalizacja (poprawna nazwa bez 'lib.')
-        const supabaseClient = supabase.createClient(SB_URL, SB_KEY);
+        const sb = supabase.createClient(SB_URL, SB_KEY);
 
-        // Funkcja pobierająca dane
-        async function loadData() {
-            try {
-                const { data: news, error } = await supabaseClient
-                    .from('news')
-                    .select('*')
-                    .order('id', { ascending: false });
-
-                if (error) throw error;
-
-                // Renderowanie dla użytkownika
-                const list = document.getElementById('news-list');
-                list.innerHTML = news.length ? "" : "Brak wiadomości.";
-                
-                // Renderowanie dla admina
-                const adminList = document.getElementById('admin-news-list');
-                adminList.innerHTML = "";
-
-                news.forEach(n => {
-                    list.innerHTML += `
-                        <div class="news-item">
-                            <h4>${n.title}</h4>
-                            <p>${n.content}</p>
-                        </div>
-                    `;
-                    adminList.innerHTML += `
-                        <div>
-                            <span>${n.title}</span>
-                            <button class="del-btn" onclick="delNews(${n.id})">Usuń</button>
-                        </div>
-                    `;
-                });
-            } catch (err) {
-                console.error("Błąd ładowania:", err);
-                document.getElementById('news-list').innerHTML = "Błąd połączenia z bazą.";
-            }
-        }
-
-        // Logowanie
         function checkAuth() {
-            const p = document.getElementById('i-pass').value;
-            if (p === "klucz") {
-                show('s-user');
+            const pass = document.getElementById('password-input').value;
+            if (pass === "klucz") {
+                show('section-user');
                 loadData();
-            } else if (p === "administracyjny") {
-                show('s-admin');
+            } else if (pass === "administracyjny") {
+                show('section-admin');
                 loadData();
             } else {
                 document.getElementById('error-msg').innerText = "Błędne hasło!";
             }
         }
 
-        // Wysyłanie newsa
-        async function sendNews() {
-            const t = document.getElementById('an-t').value;
-            const c = document.getElementById('an-c').value;
-            if (!t || !c) return alert("Wypełnij pola!");
-
-            const { error } = await supabaseClient
-                .from('news')
-                .insert([{ title: t, content: c }]);
-
+        async function loadData() {
+            // Pobieranie danych z tabeli 'news'
+            const { data, error } = await sb.from('news').select('*').order('id', { ascending: false });
+            
             if (error) {
-                alert("Błąd zapisu: " + error.message);
-            } else {
-                document.getElementById('an-t').value = "";
-                document.getElementById('an-c').value = "";
-                loadData();
+                console.log("Błąd:", error);
+                document.getElementById('news-container').innerText = "Błąd bazy. Sprawdź tabelę i RLS!";
+                return;
             }
+
+            const userList = document.getElementById('news-container');
+            const adminList = document.getElementById('admin-list');
+            
+            userList.innerHTML = data.length ? "" : "Brak postów.";
+            adminList.innerHTML = "";
+
+            data.forEach(item => {
+                userList.innerHTML += `<div class="news-item"><b>${item.title}</b><p>${item.content}</p></div>`;
+                adminList.innerHTML += `<div><span>${item.title}</span><button onclick="delPost(${item.id})" style="width:auto; background:red; padding:2px 5px;">X</button></div>`;
+            });
         }
 
-        // Usuwanie newsa
-        async function delNews(id) {
-            if (!confirm("Usunąć ten post?")) return;
-            await supabaseClient.from('news').delete().eq('id', id);
+        async function publishNews() {
+            const t = document.getElementById('post-title').value;
+            const c = document.getElementById('post-content').value;
+            if (!t || !c) return;
+
+            await sb.from('news').insert([{ title: t, content: c }]);
+            document.getElementById('post-title').value = "";
+            document.getElementById('post-content').value = "";
             loadData();
         }
 
-        // Przełączanie sekcji
+        async function delPost(id) {
+            await sb.from('news').delete().eq('id', id);
+            loadData();
+        }
+
         function show(id) {
-            document.getElementById('s-login').classList.add('hidden');
-            document.getElementById('s-user').classList.add('hidden');
-            document.getElementById('s-admin').classList.add('hidden');
+            document.getElementById('section-login').classList.add('hidden');
+            document.getElementById('section-user').classList.add('hidden');
+            document.getElementById('section-admin').classList.add('hidden');
             document.getElementById(id).classList.remove('hidden');
         }
 
-        // Odświeżanie co 10 sek jeśli ktoś jest zalogowany
+        // Odświeżanie co 10 sekund
         setInterval(() => {
-            if (document.getElementById('s-login').classList.contains('hidden')) {
-                loadData();
-            }
+            if (document.getElementById('section-login').classList.contains('hidden')) loadData();
         }, 10000);
     </script>
 </body>
