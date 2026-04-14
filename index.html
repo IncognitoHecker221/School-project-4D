@@ -1,345 +1,195 @@
 <!DOCTYPE html>
-
-
-// Dane z Twojego screena:
-const SB_URL = "https://ggiidtwcfpfqwhrsxqre.supabase.co";
-const SB_KEY = "sb_publishable_65C-SaTkrEhz5I3aAr76mg_R1ZEzsyI"; 
-
-// Inicjalizacja klienta
-const supabaseClient = supabase.createClient(SB_URL, SB_KEY);
-
-
-
 <html lang="pl">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>System Zarządzania Treścią</title>
+    <title>System Wiadomości SP24</title>
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <style>
-        :root {
-            --primary-color: #2c3e50;
-            --danger-color: #e74c3c;
-            --success-color: #27ae60;
-            --edit-color: #f39c12;
-        }
-
         body {
             font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background-color: #f0f2f5;
             margin: 0;
             display: flex;
             justify-content: center;
             align-items: center;
             min-height: 100vh;
-            background-color: #f4f7f6;
         }
-
-        /* Flagi */
-        .language-switcher {
-            position: fixed; top: 20px; right: 20px; display: flex; gap: 10px; z-index: 1000;
-        }
-        .flag { cursor: pointer; font-size: 24px; padding: 5px; border: 2px solid transparent; border-radius: 5px; transition: 0.3s; }
-        .flag.active { border-color: #3498db; background: #e1f5fe; }
-
-        /* Kontenery */
         .container {
-            background: white; padding: 30px; border-radius: 12px;
-            box-shadow: 0 10px 25px rgba(0,0,0,0.1); text-align: center;
-            width: 90%; max-width: 500px; margin: 20px;
+            background-color: white;
+            padding: 30px;
+            border-radius: 12px;
+            box-shadow: 0 4px 20px rgba(0,0,0,0.08);
+            width: 90%;
+            max-width: 450px;
+            text-align: center;
         }
-        .admin-max { max-width: 900px; }
-
-        input[type="password"], input[type="text"], textarea {
-            width: 100%; padding: 12px; margin: 10px 0;
-            border: 1px solid #ddd; border-radius: 6px; box-sizing: border-box;
+        h2 { color: #1c1e21; margin-bottom: 20px; }
+        input, textarea {
+            width: 100%;
+            padding: 12px;
+            margin: 10px 0;
+            border: 1px solid #ddd;
+            border-radius: 6px;
+            box-sizing: border-box;
         }
-
         button {
-            color: white; border: none; padding: 10px 15px;
-            border-radius: 6px; cursor: pointer; font-weight: bold; margin: 5px;
+            background-color: #2d3e50;
+            color: white;
+            border: none;
+            padding: 12px 25px;
+            border-radius: 6px;
+            cursor: pointer;
+            font-weight: bold;
+            transition: background 0.3s;
         }
-        .btn-main { background: var(--primary-color); }
-        .btn-delete { background: var(--danger-color); }
-        .btn-edit { background: var(--edit-color); }
-        .btn-save { background: var(--success-color); }
-        button:disabled { background: #ccc; cursor: not-allowed; }
-
+        button:hover { background-color: #1a252f; }
         .hidden { display: none; }
-        .error { color: var(--danger-color); font-weight: bold; margin-top: 10px; }
-        
-        /* Tabele i Posty */
-        table { width: 100%; border-collapse: collapse; margin-top: 15px; font-size: 14px; }
-        th, td { border: 1px solid #ddd; padding: 10px; text-align: left; }
-        .news-item { border-bottom: 1px solid #eee; padding: 15px 0; text-align: left; }
-        .self-ip { color: #3498db; font-weight: bold; background-color: #f0f8ff; }
-        
-        hr { border: 0; border-top: 1px solid #eee; margin: 20px 0; }
+        .news-item {
+            text-align: left;
+            border-bottom: 1px solid #eee;
+            padding: 15px 0;
+        }
+        .news-item h4 { margin: 0 0 5px 0; color: #2d3e50; }
+        .news-item p { margin: 0; color: #4b4f56; font-size: 0.95em; }
+        #admin-list div {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            background: #f9f9f9;
+            margin: 5px 0;
+            padding: 8px;
+            border-radius: 4px;
+        }
+        .del-btn { background: #ff4d4d; padding: 5px 10px; font-size: 12px; }
     </style>
 </head>
 <body>
 
-    <div class="language-switcher">
-        <span id="flag-pl" class="flag" onclick="setLang('pl')">🇵🇱</span>
-        <span id="flag-ua" class="flag" onclick="setLang('ua')">🇺🇦</span>
+    <div id="section-login" class="container">
+        <h2>Podaj hasło:</h2>
+        <input type="password" id="password-input" placeholder="Wpisz hasło...">
+        <button onclick="checkAuth()">Zatwierdź</button>
+        <p id="error-msg" style="color: red; font-size: 14px; margin-top: 10px;"></p>
     </div>
 
-    <div id="login-screen" class="container">
-        <h2 id="txt-title">Podaj hasło:</h2>
-        <input type="password" id="password-input">
+    <div id="section-user" class="container hidden">
+        <h2>Aktualności</h2>
+        <div id="news-container">Ładowanie wiadomości...</div>
         <br>
-        <button id="btn-submit" class="btn-main" onclick="checkPassword()">Zatwierdź</button>
-        <p id="lock-timer" class="error"></p>
+        <button onclick="location.reload()">Wyloguj</button>
     </div>
 
-    <div id="user-screen" class="container hidden">
-        <h2 id="txt-news-title">Aktualności</h2>
-        <div id="news-container"></div>
-        <hr>
-        <button class="btn-main" onclick="logout()">Wyloguj</button>
-    </div>
-
-    <div id="admin-screen" class="container admin-max hidden">
+    <div id="section-admin" class="container hidden">
         <h2>Panel Administratora</h2>
-        
-        <div style="text-align: left;">
-            <h3 id="admin-form-title">Dodaj nową aktualność</h3>
-            <input type="hidden" id="edit-id">
-            <input type="text" id="news-title-input" placeholder="Tytuł wpisu">
-            <textarea id="news-content-input" rows="3" placeholder="Treść wpisu"></textarea>
-            <button id="btn-add-update" class="btn-save" onclick="handleNewsSubmit()">Dodaj post</button>
-            <button id="btn-cancel-edit" class="btn-delete hidden" onclick="cancelEdit()">Anuluj edycję</button>
-
-            <hr>
-            <h3>Zarządzaj wpisami</h3>
-            <table id="news-admin-table">
-                <thead>
-                    <tr><th>Tytuł</th><th>Akcje</th></tr>
-                </thead>
-                <tbody id="news-admin-body"></tbody>
-            </table>
-
-            <hr>
-            <h3>Bezpieczeństwo (Logi IP)</h3>
-            <table id="ip-table">
-                <thead>
-                    <tr><th>IP</th><th>Błędy</th><th>Status</th><th>Akcja</th></tr>
-                </thead>
-                <tbody id="ip-body"></tbody>
-            </table>
-        </div>
+        <input type="text" id="post-title" placeholder="Tytuł wiadomości">
+        <textarea id="post-content" rows="4" placeholder="Treść wiadomości..."></textarea>
+        <button onclick="publishNews()">Opublikuj post</button>
+        <hr>
+        <h4>Zarządzaj postami:</h4>
+        <div id="admin-list"></div>
         <br>
-        <button class="btn-main" onclick="logout()">Wyloguj</button>
+        <button onclick="location.reload()">Wyloguj</button>
     </div>
 
     <script>
-        // --- KONFIGURACJA I DANE ---
-        let userIp = "Ładowanie...";
-        let editingId = null;
-        let currentLang = localStorage.getItem('lang') || 'pl';
-        let newsData = JSON.parse(localStorage.getItem('news')) || [
-            { id: 1, title: "Witaj!", content: "To jest pierwsza wiadomość systemowa." }
-        ];
-        let ipLogs = JSON.parse(localStorage.getItem('ipLogs')) || {};
+        // --- KONFIGURACJA SUPABASE ---
+        const SB_URL = "https://ggiidtwcfpfqwhrsxqre.supabase.co";
+        const SB_KEY = "sb_publishable_65C-SaTkrEhz5I3aAr76mg_R1ZEzsyI";
+        const supabaseClient = supabase.createClient(SB_URL, SB_KEY);
 
-        const translations = {
-            pl: { title: "Podaj hasło:", submit: "Zatwierdź", news: "Aktualności", wait: "Blokada! Czekaj: ", self: "(Ty)", add: "Dodaj post", update: "Zapisz zmiany" },
-            ua: { title: "Введіть пароль:", submit: "Підтвердити", news: "Новини", wait: "Блокування! Зачекайте: ", self: "(Ви)", add: "Додати", update: "Зберегти зміни" }
-        };
-
-        window.onload = () => {
-            setLang(currentLang);
-            fetchIp();
-            checkExistingLock();
-        };
-
-        // --- KOMUNIKACJA I ZAPIS ---
-        async function fetchIp() {
-            try {
-                const res = await fetch('https://api.ipify.org?format=json');
-                const data = await res.json();
-                userIp = data.ip;
-                if(!ipLogs[userIp]) ipLogs[userIp] = { attempts: 0, banned: false };
-                save();
-            } catch (e) { userIp = "127.0.0.1"; }
-        }
-
-        function save() {
-            localStorage.setItem('news', JSON.stringify(newsData));
-            localStorage.setItem('ipLogs', JSON.stringify(ipLogs));
-            localStorage.setItem('lang', currentLang);
-        }
-
-        // --- JĘZYK I BLOKADA ---
-        function setLang(lang) {
-            currentLang = lang;
-            document.getElementById('txt-title').innerText = translations[lang].title;
-            document.getElementById('btn-submit').innerText = translations[lang].submit;
-            document.getElementById('txt-news-title').innerText = translations[lang].news;
-            
-            document.querySelectorAll('.flag').forEach(f => f.classList.remove('active'));
-            document.getElementById(`flag-${lang}`).classList.add('active');
-            save();
-        }
-
-        function checkExistingLock() {
-            const lockUntil = localStorage.getItem('lockUntil');
-            if (lockUntil && Date.now() < lockUntil) {
-                startTimer(Math.ceil((lockUntil - Date.now()) / 1000));
-            }
-        }
-
-        function handleWrongPassword() {
-            const lockUntil = Date.now() + 30000;
-            localStorage.setItem('lockUntil', lockUntil);
-            if(ipLogs[userIp]) ipLogs[userIp].attempts++;
-            save();
-            startTimer(30);
-        }
-
-        function startTimer(seconds) {
-            const input = document.getElementById('password-input');
-            const btn = document.getElementById('btn-submit');
-            const timerDisplay = document.getElementById('lock-timer');
-            input.disabled = btn.disabled = true;
-
-            let timeLeft = seconds;
-            const interval = setInterval(() => {
-                timerDisplay.innerText = `${translations[currentLang].wait} ${timeLeft}s`;
-                if (timeLeft-- <= 0) {
-                    clearInterval(interval);
-                    timerDisplay.innerText = "";
-                    input.disabled = btn.disabled = false;
-                    localStorage.removeItem('lockUntil');
-                }
-            }, 1000);
-        }
-
-        // --- LOGOWANIE ---
-        function checkPassword() {
+        // Funkcja logowania
+        function checkAuth() {
             const pass = document.getElementById('password-input').value;
-            if (ipLogs[userIp]?.banned) return alert("Twoje IP jest zablokowane!");
-
             if (pass === "klucz") {
-                showScreen('user-screen');
-                renderUserNews();
+                showSection('section-user');
+                loadNews();
             } else if (pass === "administracyjny") {
-                showScreen('admin-screen');
-                renderAdminPanel();
+                showSection('section-admin');
+                loadNews();
             } else {
-                handleWrongPassword();
+                document.getElementById('error-msg').innerText = "Błędne hasło!";
             }
         }
 
-        function showScreen(id) {
-            document.querySelectorAll('.container').forEach(c => c.classList.add('hidden'));
+        // Pobieranie newsów z bazy
+        async function loadNews() {
+            const { data: news, error } = await supabaseClient
+                .from('news')
+                .select('*')
+                .order('id', { ascending: false });
+
+            if (error) {
+                console.error("Błąd pobierania:", error);
+                return;
+            }
+
+            // Lista dla użytkownika
+            const userContainer = document.getElementById('news-container');
+            userContainer.innerHTML = news.length ? "" : "Brak nowych wiadomości.";
+            
+            // Lista dla admina
+            const adminList = document.getElementById('admin-list');
+            adminList.innerHTML = "";
+
+            news.forEach(item => {
+                // Widok usera
+                userContainer.innerHTML += `
+                    <div class="news-item">
+                        <h4>${item.title}</h4>
+                        <p>${item.content}</p>
+                    </div>
+                `;
+                // Widok admina (z przyciskiem usuwania)
+                adminList.innerHTML += `
+                    <div>
+                        <span>${item.title}</span>
+                        <button class="del-btn" onclick="deleteNews(${item.id})">Usuń</button>
+                    </div>
+                `;
+            });
+        }
+
+        // Dodawanie newsa
+        async function publishNews() {
+            const title = document.getElementById('post-title').value;
+            const content = document.getElementById('post-content').value;
+
+            if (!title || !content) return alert("Wypełnij wszystkie pola!");
+
+            const { error } = await supabaseClient
+                .from('news')
+                .insert([{ title, content }]);
+
+            if (error) {
+                alert("Błąd zapisu!");
+            } else {
+                document.getElementById('post-title').value = "";
+                document.getElementById('post-content').value = "";
+                loadNews();
+            }
+        }
+
+        // Usuwanie newsa
+        async function deleteNews(id) {
+            if (!confirm("Na pewno usunąć ten post?")) return;
+            await supabaseClient.from('news').delete().eq('id', id);
+            loadNews();
+        }
+
+        // Pomocnicza funkcja do przełączania widoków
+        function showSection(id) {
+            document.getElementById('section-login').classList.add('hidden');
+            document.getElementById('section-user').classList.add('hidden');
+            document.getElementById('section-admin').classList.add('hidden');
             document.getElementById(id).classList.remove('hidden');
         }
 
-        function logout() {
-            document.getElementById('password-input').value = "";
-            cancelEdit();
-            showScreen('login-screen');
-        }
-
-        // --- LOGIKA AKTUALNOŚCI (CRUD) ---
-        function handleNewsSubmit() {
-            const title = document.getElementById('news-title-input').value;
-            const content = document.getElementById('news-content-input').value;
-            
-            if(!title || !content) return alert("Wypełnij wszystkie pola!");
-
-            if(editingId) {
-                // Edycja
-                const index = newsData.findIndex(n => n.id === editingId);
-                newsData[index].title = title;
-                newsData[index].content = content;
-                editingId = null;
-            } else {
-                // Dodawanie
-                newsData.push({ id: Date.now(), title, content });
-            }
-
-            save();
-            cancelEdit();
-            renderAdminPanel();
-        }
-
-        function deleteNews(id) {
-            if(confirm("Czy na pewno chcesz usunąć ten wpis?")) {
-                newsData = newsData.filter(n => n.id !== id);
-                save();
-                renderAdminPanel();
-            }
-        }
-
-        function startEdit(id) {
-            const item = newsData.find(n => n.id === id);
-            editingId = id;
-            document.getElementById('news-title-input').value = item.title;
-            document.getElementById('news-content-input').value = item.content;
-            document.getElementById('admin-form-title').innerText = "Edytuj wpis";
-            document.getElementById('btn-add-update').innerText = translations[currentLang].update;
-            document.getElementById('btn-cancel-edit').classList.remove('hidden');
-        }
-
-        function cancelEdit() {
-            editingId = null;
-            document.getElementById('news-title-input').value = "";
-            document.getElementById('news-content-input').value = "";
-            document.getElementById('admin-form-title').innerText = translations[currentLang].add;
-            document.getElementById('btn-add-update').innerText = translations[currentLang].add;
-            document.getElementById('btn-cancel-edit').classList.add('hidden');
-        }
-
-        // --- RENDEROWANIE ---
-        function renderUserNews() {
-            const container = document.getElementById('news-container');
-            container.innerHTML = newsData.map(n => `
-                <div class="news-item">
-                    <h4>${n.title}</h4>
-                    <p>${n.content}</p>
-                </div>
-            `).join('');
-        }
-
-        function renderAdminPanel() {
-            // Tabela postów
-            const newsBody = document.getElementById('news-admin-body');
-            newsBody.innerHTML = newsData.map(n => `
-                <tr>
-                    <td>${n.title}</td>
-                    <td>
-                        <button class="btn-edit" onclick="startEdit(${n.id})">Edytuj</button>
-                        <button class="btn-delete" onclick="deleteNews(${n.id})">Usuń</button>
-                    </td>
-                </tr>
-            `).join('');
-
-            // Tabela IP
-            const ipBody = document.getElementById('ip-body');
-            ipBody.innerHTML = Object.keys(ipLogs).map(ip => {
-                const isMe = (ip === userIp);
-                return `
-                <tr class="${isMe ? 'self-ip' : ''}">
-                    <td>${ip} ${isMe ? translations[currentLang].self : ''}</td>
-                    <td>${ipLogs[ip].attempts}</td>
-                    <td>${ipLogs[ip].banned ? 'BAN' : 'OK'}</td>
-                    <td>
-                        <button onclick="toggleBan('${ip}')" 
-                                style="background:${ipLogs[ip].banned ? '#27ae60' : '#e74c3c'}"
-                                ${isMe ? 'disabled' : ''}>
-                            ${ipLogs[ip].banned ? 'Odblokuj' : 'Zablokuj'}
-                        </button>
-                    </td>
-                </tr>`;
-            }).join('');
-        }
-
-        function toggleBan(ip) {
-            if(ip === userIp) return;
-            ipLogs[ip].banned = !ipLogs[ip].banned;
-            save();
-            renderAdminPanel();
-        }
+        // Automatyczne odświeżanie newsów co 10 sekund (Realtime)
+        setInterval(() => {
+            if (!document.getElementById('section-login').classList.contains('hidden')) return;
+            loadNews();
+        }, 10000);
     </script>
 </body>
 </html>
