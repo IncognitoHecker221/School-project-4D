@@ -18,8 +18,7 @@
         .admin-btns { display: flex; gap: 5px; margin-top: 5px; }
         .btn-edit { background: #f39c12; flex: 1; padding: 5px; font-size: 12px; border: none; color: white; border-radius: 4px; cursor: pointer; }
         .btn-del { background: #e74c3c; flex: 1; padding: 5px; font-size: 12px; border: none; color: white; border-radius: 4px; cursor: pointer; }
-        /* Dodatkowy styl dla sekcji IP */
-        .ip-list { margin-top: 20px; text-align: left; font-size: 12px; border-top: 2px solid #2d3e50; padding-top: 10px; }
+        .ip-list { margin-top: 20px; text-align: left; font-size: 12px; border-top: 2px solid #2d3e50; padding-top: 10px; max-height: 200px; overflow-y: auto; }
         .ip-row { padding: 5px; border-bottom: 1px solid #ddd; }
     </style>
 </head>
@@ -32,7 +31,7 @@
 
     <div id="section-banned" class="container hidden">
         <h2 style="color: red;">DOSTĘP ZABLOKOWANY</h2>
-        <p>Twoje połączenie zostało przerwane przez administratora lub system bezpieczeństwa.</p>
+        <p id="banned-reason" style="font-weight: bold; margin-top: 10px;"></p>
     </div>
 
     <div id="section-login" class="container">
@@ -56,12 +55,10 @@
         <button id="btn-cancel" class="hidden" onclick="resetForm()" style="background:#95a5a6">Anuluj</button>
         <hr style="margin: 20px 0;">
         <div id="admin-list"></div>
-        
         <div class="ip-list">
-            <h4>System Bezpieczeństwa (IP):</h4>
-            <div id="ip-admin-container">Pobieranie danych...</div>
+            <h4>Logi Bezpieczeństwa (IP):</h4>
+            <div id="ip-admin-container">Pobieranie...</div>
         </div>
-
         <button onclick="location.reload()" style="background:#666; margin-top:20px">Wyloguj</button>
     </div>
 
@@ -73,66 +70,66 @@
         let userIP = "";
         let editingTitle = null;
 
-        // 1. POBIERANIE IP I SPRAWDZANIE BLOKAD NA START
         async function initSecurity() {
             try {
+                // Pobranie IP użytkownika
                 const res = await fetch('https://api.ipify.org?format=json');
-                const data = await res.json();
-                userIP = data.ip;
+                const ipData = await res.json();
+                userIP = ipData.ip;
 
-                // Sprawdź Lockdown (Emergency)
-                const { data: emergency } = await sb.from('emergency').select('on').single();
-                if (emergency && emergency.on) {
-                    lockdown();
+                // 1. Sprawdź Emergency Lockdown i pobierz wiadomość
+                const { data: emg } = await sb.from('emergency').select('on, message').limit(1).maybeSingle();
+                if (emg && emg.on) {
+                    showBanned(emg.message || "Trwa przerwa techniczna. Zapraszamy później.");
                     return;
                 }
 
-                // Sprawdź czy IP jest zbanowane
-                const { data: banRecord } = await sb.from('bans').select('*').eq('ip', userIP).single();
-                if (banRecord && banRecord.is_banned) {
-                    lockdown();
+                // 2. Sprawdź czy IP jest na liście banów
+                const { data: banData } = await sb.from('bans').select('*').eq('ip', userIP).maybeSingle();
+                if (banData && banData.is_banned) {
+                    showBanned("Twoje IP zostało zablokowane przez administratora.");
                     return;
                 }
 
-                // Jeśli IP nie ma w bazie, dodaj je z 0 próbami
-                if (!banRecord) {
-                    await sb.from('bans').insert([{ ip: userIP, attempts: 0, is_banned: false }]);
+                // 3. Zapisz IP w bazie (Upsert), aby admin widział kto wszedł
+                if (!banData) {
+                    await sb.from('bans').upsert({ ip: userIP, attempts: 0, is_banned: false }, { onConflict: 'ip' });
                 }
-            } catch (e) { console.error("Błąd bezpieczeństwa", e); }
+            } catch (e) {
+                console.error("Błąd bezpieczeństwa:", e);
+            }
         }
 
-        function lockdown() {
-            document.body.innerHTML = document.getElementById('section-banned').outerHTML;
+        function showBanned(reason) {
+            document.querySelectorAll('.container').forEach(c => c.classList.add('hidden'));
             document.getElementById('section-banned').classList.remove('hidden');
+            document.getElementById('banned-reason').innerText = reason;
         }
 
         initSecurity();
 
         async function loadData() {
-            try {
-                const { data, error } = await sb.from('news').select('*');
-                if (error) throw error;
+            const { data } = await sb.from('news').select('*');
+            if (data) {
                 const userDiv = document.getElementById('news-container');
                 const adminDiv = document.getElementById('admin-list');
                 userDiv.innerHTML = data.length ? "" : "Brak wiadomości.";
                 adminDiv.innerHTML = "";
-                data.reverse().forEach(item => {
+                data.slice().reverse().forEach(item => {
                     userDiv.innerHTML += `<div class="news-item"><b>${item.title}</b><p>${item.content}</p></div>`;
-                    adminDiv.innerHTML += `<div class="admin-item"><b>${item.title}</b><div class="admin-btns"><button class="btn-edit" onclick="prepareEdit('${item.title.replace(/'/g, "\\'")}', '${item.content.replace(/'/g, "\\Source")}')">Edytuj</button><button class="btn-del" onclick="deletePost('${item.title.replace(/'/g, "\\'")}')">Usuń</button></div></div>`;
+                    adminDiv.innerHTML += `<div class="admin-item"><b>${item.title}</b><div class="admin-btns"><button class="btn-edit" onclick="prepareEdit('${item.title.replace(/'/g, "\\'")}', '${item.content.replace(/'/g, "\\'")}')">Edytuj</button><button class="btn-del" onclick="deletePost('${item.title.replace(/'/g, "\\'")}')">Usuń</button></div></div>`;
                 });
-
-                // Załaduj listę IP dla admina
-                loadIPList();
-            } catch (e) { console.error(e); }
+            }
+            loadIPList();
         }
 
         async function loadIPList() {
             const container = document.getElementById('ip-admin-container');
-            const { data: bans } = await sb.from('bans').select('*');
-            if (bans) {
-                container.innerHTML = bans.map(b => `
+            const { data } = await sb.from('bans').select('*');
+            if (data) {
+                container.innerHTML = data.map(b => `
                     <div class="ip-row">
-                        IP: <b>${b.ip}</b> | Próby: ${b.attempts} | Zbanowany: ${b.is_banned ? '<span style="color:red">TAK</span>' : 'NIE'}
+                        IP: <b>${b.ip}</b> | Próby: ${b.attempts} | Ban: ${b.is_banned ? '<span style="color:red">TAK</span>' : 'NIE'}
                     </div>
                 `).join('');
             }
@@ -140,20 +137,14 @@
 
         async function checkAuth() {
             const p = document.getElementById('password-input').value;
-            if (p === "klucz") { 
-                show('section-user'); 
-                loadData(); 
-            }
-            else if (p === "administracyjny") { 
-                show('section-admin'); 
-                loadData(); 
-            }
+            if (p === "klucz") { show('section-user'); loadData(); }
+            else if (p === "administracyjny") { show('section-admin'); loadData(); }
             else { 
                 document.getElementById('error-msg').innerText = "Błędne hasło!";
-                // Zwiększ licznik błędnych prób w bazie dla tego IP
                 if(userIP) {
-                    const { data } = await sb.from('bans').select('attempts').eq('ip', userIP).single();
-                    await sb.from('bans').update({ attempts: (data?.attempts || 0) + 1 }).eq('ip', userIP);
+                    const { data } = await sb.from('bans').select('attempts').eq('ip', userIP).maybeSingle();
+                    const newAttempts = (data ? data.attempts : 0) + 1;
+                    await sb.from('bans').update({ attempts: newAttempts }).eq('ip', userIP);
                 }
             }
         }
@@ -162,13 +153,9 @@
             const t = document.getElementById('post-title').value;
             const c = document.getElementById('post-content').value;
             if(!t || !c) return;
-            if (editingTitle) {
-                await sb.from('news').update({ title: t, content: c }).eq('title', editingTitle);
-            } else {
-                await sb.from('news').insert([{ title: t, content: c }]);
-            }
-            resetForm();
-            loadData();
+            if (editingTitle) { await sb.from('news').update({ title: t, content: c }).eq('title', editingTitle); }
+            else { await sb.from('news').insert([{ title: t, content: c }]); }
+            resetForm(); loadData();
         }
 
         function prepareEdit(title, content) {
@@ -176,7 +163,6 @@
             document.getElementById('post-title').value = title;
             document.getElementById('post-content').value = content;
             document.getElementById('btn-save').innerText = "Zapisz zmiany";
-            document.getElementById('admin-header').innerText = "Edytujesz post";
             document.getElementById('btn-cancel').classList.remove('hidden');
         }
 
@@ -185,14 +171,11 @@
             document.getElementById('post-title').value = "";
             document.getElementById('post-content').value = "";
             document.getElementById('btn-save').innerText = "Opublikuj";
-            document.getElementById('admin-header').innerText = "Nowa wiadomość";
             document.getElementById('btn-cancel').classList.add('hidden');
         }
 
         async function deletePost(title) {
-            if (!confirm("Usunąć post: " + title + "?")) return;
-            await sb.from('news').delete().eq('title', title);
-            loadData();
+            if (confirm("Usunąć?")) { await sb.from('news').delete().eq('title', title); loadData(); }
         }
 
         function show(id) {
@@ -200,12 +183,8 @@
             document.getElementById(id).classList.remove('hidden');
         }
 
-        setInterval(() => {
-            if (!document.getElementById('section-login').classList.contains('hidden')) {
-                loadData();
-                initSecurity(); // Sprawdzaj czy w międzyczasie nie wszedł Lockdown
-            }
-        }, 10000);
+        // Auto-odświeżanie logów i postów co 15 sekund
+        setInterval(() => { if (!document.getElementById('section-login').classList.contains('hidden')) loadData(); }, 15000);
     </script>
 </body>
 </html>
