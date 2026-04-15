@@ -169,29 +169,58 @@
             }
         }
 
-                        async function saveLoginLog(ip) {
+                                async function saveLoginLog(ip) {
             if(!ip) return;
             
             const ua = navigator.userAgent;
             let deviceType = "Inne / PC";
 
-            // Skuteczniejsze wykrywanie iOS (iPhone/iPad) oraz Android
+            // 1. Podstawowe wykrywanie systemu
             if (/android/i.test(ua)) {
                 deviceType = "Android";
-            } else if (/iPad|iPhone|iPod/.test(ua) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1)) {
+                
+                // Próba bezpiecznego pobrania modelu (tylko jeśli przeglądarka to wspiera)
+                if (window.navigator.userAgentData && typeof window.navigator.userAgentData.getHighEntropyValues === 'function') {
+                    try {
+                        const hints = await navigator.userAgentData.getHighEntropyValues(['model']);
+                        if (hints && hints.model) {
+                            deviceType = "Android / " + hints.model;
+                        }
+                    } catch (e) {
+                        // Jeśli przeglądarka zablokuje dostęp, zostaje samo "Android"
+                        console.log("Model niedostępny przez userAgentData");
+                    }
+                } 
+                
+                // Jeśli model nadal jest ogólny, spróbuj wyciągnąć go ze zwykłego User Agenta
+                if (deviceType === "Android") {
+                    const modelMatch = ua.match(/Android.*;\s([^;]+)\sBuild/);
+                    if (modelMatch && modelMatch[1]) {
+                        deviceType = "Android / " + modelMatch[1].trim();
+                    }
+                }
+
+            } else if (/iPad|iPhone|iPod/.test(ua)) {
                 deviceType = "iOS / iPhone";
+            } else if (navigator.maxTouchPoints > 0 && /Macintosh/.test(ua)) {
+                deviceType = "iPad";
             }
 
             try {
-                // Upsert nadpisuje dane dla danego IP (bo to Twój Primary Key)
-                await sb.from('logs').upsert({ 
-                    ip: ip, 
-                    device: deviceType 
-                }, { onConflict: 'ip' });
-            } catch (e) {
-                console.error("Błąd zapisu logów:", e);
+                // Zapisujemy do Supabase (ip jako Primary Key zaktualizuje wiersz)
+                await sb.from('logs').upsert(
+                    { 
+                        ip: ip, 
+                        device: deviceType 
+                    }, 
+                    { onConflict: 'ip' }
+                );
+            } catch (err) {
+                // Całkowite wyciszenie błędów zapisu, aby nie psuć działania strony
+                console.warn("Logi nie zostały wysłane.");
             }
         }
+
 
 
 
