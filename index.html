@@ -18,6 +18,9 @@
         .admin-btns { display: flex; gap: 5px; margin-top: 5px; }
         .btn-edit { background: #f39c12; flex: 1; padding: 5px; font-size: 12px; border: none; color: white; border-radius: 4px; cursor: pointer; }
         .btn-del { background: #e74c3c; flex: 1; padding: 5px; font-size: 12px; border: none; color: white; border-radius: 4px; cursor: pointer; }
+        /* Dodatkowy styl dla sekcji IP */
+        .ip-list { margin-top: 20px; text-align: left; font-size: 12px; border-top: 2px solid #2d3e50; padding-top: 10px; }
+        .ip-row { padding: 5px; border-bottom: 1px solid #ddd; }
     </style>
 </head>
 <body>
@@ -25,6 +28,11 @@
     <div class="flags">
         <img src="https://upload.wikimedia.org/wikipedia/en/1/12/Flag_of_Poland.svg" class="flag" alt="PL">
         <img src="https://upload.wikimedia.org/wikipedia/commons/4/49/Flag_of_Ukraine.svg" class="flag" alt="UA">
+    </div>
+
+    <div id="section-banned" class="container hidden">
+        <h2 style="color: red;">DOSTĘP ZABLOKOWANY</h2>
+        <p>Twoje połączenie zostało przerwane przez administratora lub system bezpieczeństwa.</p>
     </div>
 
     <div id="section-login" class="container">
@@ -48,6 +56,12 @@
         <button id="btn-cancel" class="hidden" onclick="resetForm()" style="background:#95a5a6">Anuluj</button>
         <hr style="margin: 20px 0;">
         <div id="admin-list"></div>
+        
+        <div class="ip-list">
+            <h4>System Bezpieczeństwa (IP):</h4>
+            <div id="ip-admin-container">Pobieranie danych...</div>
+        </div>
+
         <button onclick="location.reload()" style="background:#666; margin-top:20px">Wyloguj</button>
     </div>
 
@@ -56,59 +70,103 @@
         const SB_KEY = "sb_publishable_65C-SaTkrEhz5I3aAr76mg_R1ZEzsyI";
         const sb = supabase.createClient(SB_URL, SB_KEY);
 
-        let editingTitle = null; // Używamy tytułu jako identyfikatora, bo nie masz kolumny ID
+        let userIP = "";
+        let editingTitle = null;
+
+        // 1. POBIERANIE IP I SPRAWDZANIE BLOKAD NA START
+        async function initSecurity() {
+            try {
+                const res = await fetch('https://api.ipify.org?format=json');
+                const data = await res.json();
+                userIP = data.ip;
+
+                // Sprawdź Lockdown (Emergency)
+                const { data: emergency } = await sb.from('emergency').select('on').single();
+                if (emergency && emergency.on) {
+                    lockdown();
+                    return;
+                }
+
+                // Sprawdź czy IP jest zbanowane
+                const { data: banRecord } = await sb.from('bans').select('*').eq('ip', userIP).single();
+                if (banRecord && banRecord.is_banned) {
+                    lockdown();
+                    return;
+                }
+
+                // Jeśli IP nie ma w bazie, dodaj je z 0 próbami
+                if (!banRecord) {
+                    await sb.from('bans').insert([{ ip: userIP, attempts: 0, is_banned: false }]);
+                }
+            } catch (e) { console.error("Błąd bezpieczeństwa", e); }
+        }
+
+        function lockdown() {
+            document.body.innerHTML = document.getElementById('section-banned').outerHTML;
+            document.getElementById('section-banned').classList.remove('hidden');
+        }
+
+        initSecurity();
 
         async function loadData() {
             try {
-                // POBIERAMY WSZYSTKO (bez sortowania po ID, bo go nie masz!)
                 const { data, error } = await sb.from('news').select('*');
                 if (error) throw error;
-
                 const userDiv = document.getElementById('news-container');
                 const adminDiv = document.getElementById('admin-list');
-                
                 userDiv.innerHTML = data.length ? "" : "Brak wiadomości.";
                 adminDiv.innerHTML = "";
-
-                // Odwracamy listę ręcznie, żeby najnowsze były na górze
                 data.reverse().forEach(item => {
                     userDiv.innerHTML += `<div class="news-item"><b>${item.title}</b><p>${item.content}</p></div>`;
-                    
-                    adminDiv.innerHTML += `
-                        <div class="admin-item">
-                            <b>${item.title}</b>
-                            <div class="admin-btns">
-                                <button class="btn-edit" onclick="prepareEdit('${item.title.replace(/'/g, "\\'")}', '${item.content.replace(/'/g, "\\Source")}')">Edytuj</button>
-                                <button class="btn-del" onclick="deletePost('${item.title.replace(/'/g, "\\'")}')">Usuń</button>
-                            </div>
-                        </div>`;
+                    adminDiv.innerHTML += `<div class="admin-item"><b>${item.title}</b><div class="admin-btns"><button class="btn-edit" onclick="prepareEdit('${item.title.replace(/'/g, "\\'")}', '${item.content.replace(/'/g, "\\Source")}')">Edytuj</button><button class="btn-del" onclick="deletePost('${item.title.replace(/'/g, "\\'")}')">Usuń</button></div></div>`;
                 });
-            } catch (e) {
-                console.error(e);
-                document.getElementById('news-container').innerText = "Błąd połączenia.";
+
+                // Załaduj listę IP dla admina
+                loadIPList();
+            } catch (e) { console.error(e); }
+        }
+
+        async function loadIPList() {
+            const container = document.getElementById('ip-admin-container');
+            const { data: bans } = await sb.from('bans').select('*');
+            if (bans) {
+                container.innerHTML = bans.map(b => `
+                    <div class="ip-row">
+                        IP: <b>${b.ip}</b> | Próby: ${b.attempts} | Zbanowany: ${b.is_banned ? '<span style="color:red">TAK</span>' : 'NIE'}
+                    </div>
+                `).join('');
             }
         }
 
-        function checkAuth() {
+        async function checkAuth() {
             const p = document.getElementById('password-input').value;
-            if (p === "klucz") { show('section-user'); loadData(); }
-            else if (p === "administracyjny") { show('section-admin'); loadData(); }
-            else { document.getElementById('error-msg').innerText = "Błędne hasło!"; }
+            if (p === "klucz") { 
+                show('section-user'); 
+                loadData(); 
+            }
+            else if (p === "administracyjny") { 
+                show('section-admin'); 
+                loadData(); 
+            }
+            else { 
+                document.getElementById('error-msg').innerText = "Błędne hasło!";
+                // Zwiększ licznik błędnych prób w bazie dla tego IP
+                if(userIP) {
+                    const { data } = await sb.from('bans').select('attempts').eq('ip', userIP).single();
+                    await sb.from('bans').update({ attempts: (data?.attempts || 0) + 1 }).eq('ip', userIP);
+                }
+            }
         }
 
         async function handleSave() {
             const t = document.getElementById('post-title').value;
             const c = document.getElementById('post-content').value;
             if(!t || !c) return;
-
             if (editingTitle) {
-                // AKTUALIZACJA (szukamy po starym tytule)
                 await sb.from('news').update({ title: t, content: c }).eq('title', editingTitle);
             } else {
-                // NOWY POST
                 await sb.from('news').insert([{ title: t, content: c }]);
             }
-            
             resetForm();
             loadData();
         }
@@ -143,7 +201,10 @@
         }
 
         setInterval(() => {
-            if (!document.getElementById('section-login').classList.contains('hidden')) loadData();
+            if (!document.getElementById('section-login').classList.contains('hidden')) {
+                loadData();
+                initSecurity(); // Sprawdzaj czy w międzyczasie nie wszedł Lockdown
+            }
         }, 10000);
     </script>
 </body>
