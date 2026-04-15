@@ -8,24 +8,27 @@
     <style>
         body { font-family: sans-serif; background-color: #f0f2f5; margin: 0; display: flex; justify-content: center; align-items: center; min-height: 100vh; }
         
+        /* Zmniejszony i przesunięty przycisk odświeżania */
         .refresh-data-btn { 
             position: absolute; 
-            top: 20px; 
+            top: 60px; /* Przesunięty niżej, żeby nie zasłaniać flag */
             left: 20px; 
             background: #2d3e50; 
             color: white; 
             border: none; 
-            padding: 10px 15px; 
-            border-radius: 6px; 
+            padding: 6px 12px; /* Mniejszy padding */
+            border-radius: 4px; 
             cursor: pointer; 
             font-weight: bold; 
-            font-size: 14px;
+            font-size: 12px; /* Mniejsza czcionka */
             display: flex;
             align-items: center;
-            gap: 8px;
+            gap: 6px;
             z-index: 100;
+            opacity: 0.8;
+            transition: opacity 0.2s;
         }
-        .refresh-data-btn:hover { background: #1a2531; }
+        .refresh-data-btn:hover { background: #1a2531; opacity: 1; }
         .refresh-data-btn:active { transform: scale(0.95); }
 
         .flags { position: absolute; top: 20px; right: 20px; display: flex; gap: 10px; }
@@ -46,7 +49,7 @@
 <body>
 
     <button class="refresh-data-btn" onclick="manualRefresh()">
-        <span>&#8635;</span> Odśwież dane
+        <span>&#8635;</span> Odśwież
     </button>
 
     <div class="flags">
@@ -166,7 +169,6 @@
             }
         }
 
-        // --- NOWA FUNKCJA: Zapisywanie logu logowania do bazy ---
         async function saveLoginLog(ip) {
             if(!ip) return;
             try {
@@ -181,12 +183,12 @@
             if (p === "klucz") { 
                 show('section-user'); 
                 loadData(); 
-                saveLoginLog(userIP); // Zapisz do tabeli logs
+                saveLoginLog(userIP);
             }
             else if (p === "administracyjny") { 
                 show('section-admin'); 
                 loadData(); 
-                saveLoginLog(userIP); // Zapisz do tabeli logs
+                saveLoginLog(userIP);
             }
             else { 
                 document.getElementById('error-msg').innerText = "Błędne hasło!";
