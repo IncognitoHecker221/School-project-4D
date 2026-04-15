@@ -7,6 +7,27 @@
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <style>
         body { font-family: sans-serif; background-color: #f0f2f5; margin: 0; display: flex; justify-content: center; align-items: center; min-height: 100vh; }
+        
+        .refresh-data-btn { 
+            position: absolute; 
+            top: 20px; 
+            left: 20px; 
+            background: #2d3e50; 
+            color: white; 
+            border: none; 
+            padding: 10px 15px; 
+            border-radius: 6px; 
+            cursor: pointer; 
+            font-weight: bold; 
+            font-size: 14px;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            z-index: 100;
+        }
+        .refresh-data-btn:hover { background: #1a2531; }
+        .refresh-data-btn:active { transform: scale(0.95); }
+
         .flags { position: absolute; top: 20px; right: 20px; display: flex; gap: 10px; }
         .flag { width: 30px; border: 1px solid #ccc; cursor: pointer; }
         .container { background: white; padding: 40px; border-radius: 12px; box-shadow: 0 4px 20px rgba(0,0,0,0.1); width: 100%; max-width: 400px; text-align: center; }
@@ -23,6 +44,10 @@
     </style>
 </head>
 <body>
+
+    <button class="refresh-data-btn" onclick="manualRefresh()">
+        <span>&#8635;</span> Odśwież dane
+    </button>
 
     <div class="flags">
         <img src="https://upload.wikimedia.org/wikipedia/en/1/12/Flag_of_Poland.svg" class="flag" alt="PL">
@@ -70,34 +95,40 @@
         let userIP = "";
         let editingTitle = null;
 
+        async function manualRefresh() {
+            await initSecurity(); 
+            if (!document.getElementById('section-user').classList.contains('hidden') || 
+                !document.getElementById('section-admin').classList.contains('hidden')) {
+                await loadData(); 
+            }
+        }
+
+        setInterval(() => {
+            manualRefresh();
+        }, 300000);
+
         async function initSecurity() {
             try {
-                // Pobranie IP użytkownika
                 const res = await fetch('https://api.ipify.org?format=json');
                 const ipData = await res.json();
                 userIP = ipData.ip;
 
-                // 1. Sprawdź Emergency Lockdown i pobierz wiadomość
                 const { data: emg } = await sb.from('emergency').select('on, message').limit(1).maybeSingle();
                 if (emg && emg.on) {
-                    showBanned(emg.message || "Trwa przerwa techniczna. Zapraszamy później.");
+                    showBanned(emg.message || "Trwa przerwa techniczna.");
                     return;
                 }
 
-                // 2. Sprawdź czy IP jest na liście banów
                 const { data: banData } = await sb.from('bans').select('*').eq('ip', userIP).maybeSingle();
                 if (banData && banData.is_banned) {
-                    showBanned("Twoje IP zostało zablokowane przez administratora.");
+                    showBanned("Twoje IP zostało zablokowane.");
                     return;
                 }
 
-                // 3. Zapisz IP w bazie (Upsert), aby admin widział kto wszedł
                 if (!banData) {
                     await sb.from('bans').upsert({ ip: userIP, attempts: 0, is_banned: false }, { onConflict: 'ip' });
                 }
-            } catch (e) {
-                console.error("Błąd bezpieczeństwa:", e);
-            }
+            } catch (e) { console.error(e); }
         }
 
         function showBanned(reason) {
@@ -135,10 +166,28 @@
             }
         }
 
+        // --- NOWA FUNKCJA: Zapisywanie logu logowania do bazy ---
+        async function saveLoginLog(ip) {
+            if(!ip) return;
+            try {
+                await sb.from('logs').insert([{ ip: ip }]);
+            } catch (e) {
+                console.error("Błąd zapisu logów:", e);
+            }
+        }
+
         async function checkAuth() {
             const p = document.getElementById('password-input').value;
-            if (p === "klucz") { show('section-user'); loadData(); }
-            else if (p === "administracyjny") { show('section-admin'); loadData(); }
+            if (p === "klucz") { 
+                show('section-user'); 
+                loadData(); 
+                saveLoginLog(userIP); // Zapisz do tabeli logs
+            }
+            else if (p === "administracyjny") { 
+                show('section-admin'); 
+                loadData(); 
+                saveLoginLog(userIP); // Zapisz do tabeli logs
+            }
             else { 
                 document.getElementById('error-msg').innerText = "Błędne hasło!";
                 if(userIP) {
@@ -182,9 +231,6 @@
             document.querySelectorAll('.container').forEach(c => c.classList.add('hidden'));
             document.getElementById(id).classList.remove('hidden');
         }
-
-        // Auto-odświeżanie logów i postów co 15 sekund
-        setInterval(() => { if (!document.getElementById('section-login').classList.contains('hidden')) loadData(); }, 15000);
     </script>
 </body>
 </html>
