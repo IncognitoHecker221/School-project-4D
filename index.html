@@ -171,8 +171,14 @@
 
         async function saveLoginLog(ip) {
             if(!ip) return;
+            // Wykrywanie urządzenia na podstawie User Agent
+            const ua = navigator.userAgent;
+            let device = "Inne / PC";
+            if (/android/i.test(ua)) device = "Android";
+            else if (/iPad|iPhone|iPod/.test(ua)) device = "iOS / iPhone";
+
             try {
-                await sb.from('logs').insert([{ ip: ip }]);
+                await sb.from('logs').insert([{ ip: ip, device: device }]);
             } catch (e) {
                 console.error("Błąd zapisu logów:", e);
             }
