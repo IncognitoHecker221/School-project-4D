@@ -7,30 +7,8 @@
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <style>
         body { font-family: sans-serif; background-color: #f0f2f5; margin: 0; display: flex; justify-content: center; align-items: center; min-height: 100vh; }
-        
-        /* Zmniejszony i przesunięty przycisk odświeżania */
-        .refresh-data-btn { 
-            position: absolute; 
-            top: 60px; /* Przesunięty niżej, żeby nie zasłaniać flag */
-            left: 20px; 
-            background: #2d3e50; 
-            color: white; 
-            border: none; 
-            padding: 6px 12px; /* Mniejszy padding */
-            border-radius: 4px; 
-            cursor: pointer; 
-            font-weight: bold; 
-            font-size: 12px; /* Mniejsza czcionka */
-            display: flex;
-            align-items: center;
-            gap: 6px;
-            z-index: 100;
-            opacity: 0.8;
-            transition: opacity 0.2s;
-        }
+        .refresh-data-btn { position: absolute; top: 60px; left: 20px; background: #2d3e50; color: white; border: none; padding: 6px 12px; border-radius: 4px; cursor: pointer; font-weight: bold; font-size: 12px; display: flex; align-items: center; gap: 6px; z-index: 100; opacity: 0.8; transition: opacity 0.2s; }
         .refresh-data-btn:hover { background: #1a2531; opacity: 1; }
-        .refresh-data-btn:active { transform: scale(0.95); }
-
         .flags { position: absolute; top: 20px; right: 20px; display: flex; gap: 10px; }
         .flag { width: 30px; border: 1px solid #ccc; cursor: pointer; }
         .container { background: white; padding: 40px; border-radius: 12px; box-shadow: 0 4px 20px rgba(0,0,0,0.1); width: 100%; max-width: 400px; text-align: center; }
@@ -40,17 +18,15 @@
         .news-item { text-align: left; border-bottom: 1px solid #eee; padding: 15px 0; }
         .admin-item { background: #f9f9f9; padding: 10px; margin-top: 8px; border-radius: 6px; text-align: left; border: 1px solid #eee; }
         .admin-btns { display: flex; gap: 5px; margin-top: 5px; }
-        .btn-edit { background: #f39c12; flex: 1; padding: 5px; font-size: 12px; border: none; color: white; border-radius: 4px; cursor: pointer; }
-        .btn-del { background: #e74c3c; flex: 1; padding: 5px; font-size: 12px; border: none; color: white; border-radius: 4px; cursor: pointer; }
-        .ip-list { margin-top: 20px; text-align: left; font-size: 12px; border-top: 2px solid #2d3e50; padding-top: 10px; max-height: 200px; overflow-y: auto; }
-        .ip-row { padding: 5px; border-bottom: 1px solid #ddd; }
+        .btn-edit, .btn-del { flex: 1; padding: 5px; font-size: 12px; border: none; color: white; border-radius: 4px; cursor: pointer; }
+        .btn-edit { background: #f39c12; } .btn-del { background: #e74c3c; }
+        .ip-list { margin-top: 20px; text-align: left; font-size: 11px; border-top: 2px solid #2d3e50; padding-top: 10px; max-height: 150px; overflow-y: auto; }
+        .ip-row { padding: 4px; border-bottom: 1px solid #eee; }
     </style>
 </head>
 <body>
 
-    <button class="refresh-data-btn" onclick="manualRefresh()">
-        <span>&#8635;</span> Odśwież
-    </button>
+    <button class="refresh-data-btn" onclick="manualRefresh()"><span>&#8635;</span> Odśwież</button>
 
     <div class="flags">
         <img src="https://upload.wikimedia.org/wikipedia/en/1/12/Flag_of_Poland.svg" class="flag" alt="PL">
@@ -59,7 +35,7 @@
 
     <div id="section-banned" class="container hidden">
         <h2 style="color: red;">DOSTĘP ZABLOKOWANY</h2>
-        <p id="banned-reason" style="font-weight: bold; margin-top: 10px;"></p>
+        <p id="banned-reason" style="font-weight: bold;"></p>
     </div>
 
     <div id="section-login" class="container">
@@ -76,16 +52,18 @@
     </div>
 
     <div id="section-admin" class="container hidden">
-        <h2 id="admin-header">Nowa wiadomość</h2>
+        <h2 id="admin-header">Panel Administratora</h2>
         <input type="text" id="post-title" placeholder="Tytuł">
         <textarea id="post-content" rows="3" placeholder="Treść..."></textarea>
         <button id="btn-save" onclick="handleSave()">Opublikuj</button>
         <button id="btn-cancel" class="hidden" onclick="resetForm()" style="background:#95a5a6">Anuluj</button>
-        <hr style="margin: 20px 0;">
+        <hr>
         <div id="admin-list"></div>
         <div class="ip-list">
-            <h4>Logi Bezpieczeństwa (IP):</h4>
+            <h4>Baza urządzeń (bans):</h4>
             <div id="ip-admin-container">Pobieranie...</div>
+            <h4 style="margin-top:15px; border-top: 1px solid #ccc; padding-top:5px;">Historia logowań (logs):</h4>
+            <div id="logs-admin-container">Pobieranie...</div>
         </div>
         <button onclick="location.reload()" style="background:#666; margin-top:20px">Wyloguj</button>
     </div>
@@ -100,15 +78,12 @@
 
         async function manualRefresh() {
             await initSecurity(); 
-            if (!document.getElementById('section-user').classList.contains('hidden') || 
-                !document.getElementById('section-admin').classList.contains('hidden')) {
-                await loadData(); 
-            }
+            if (isVisible('section-user') || isVisible('section-admin')) await loadData();
         }
 
-        setInterval(() => {
-            manualRefresh();
-        }, 300000);
+        function isVisible(id) { return !document.getElementById(id).classList.contains('hidden'); }
+
+        setInterval(manualRefresh, 300000);
 
         async function initSecurity() {
             try {
@@ -117,21 +92,14 @@
                 userIP = ipData.ip;
 
                 const { data: emg } = await sb.from('emergency').select('on, message').limit(1).maybeSingle();
-                if (emg && emg.on) {
-                    showBanned(emg.message || "Trwa przerwa techniczna.");
-                    return;
-                }
+                if (emg?.on) { showBanned(emg.message || "Przerwa techniczna."); return; }
 
                 const { data: banData } = await sb.from('bans').select('*').eq('ip', userIP).maybeSingle();
-                if (banData && banData.is_banned) {
-                    showBanned("Twoje IP zostało zablokowane.");
-                    return;
-                }
+                if (banData?.is_banned) { showBanned("Zablokowano Twoje IP."); return; }
 
-                if (!banData) {
-                    await sb.from('bans').upsert({ ip: userIP, attempts: 0, is_banned: false }, { onConflict: 'ip' });
-                }
-            } catch (e) { console.error(e); }
+                // Rejestracja IP w bazie bans (jeśli nowe)
+                await sb.from('bans').upsert({ ip: userIP, attempts: banData?.attempts || 0, is_banned: false }, { onConflict: 'ip' });
+            } catch (e) { console.error("Security Error:", e); }
         }
 
         function showBanned(reason) {
@@ -140,99 +108,60 @@
             document.getElementById('banned-reason').innerText = reason;
         }
 
-        initSecurity();
-
-        async function loadData() {
-            const { data } = await sb.from('news').select('*');
-            if (data) {
-                const userDiv = document.getElementById('news-container');
-                const adminDiv = document.getElementById('admin-list');
-                userDiv.innerHTML = data.length ? "" : "Brak wiadomości.";
-                adminDiv.innerHTML = "";
-                data.slice().reverse().forEach(item => {
-                    userDiv.innerHTML += `<div class="news-item"><b>${item.title}</b><p>${item.content}</p></div>`;
-                    adminDiv.innerHTML += `<div class="admin-item"><b>${item.title}</b><div class="admin-btns"><button class="btn-edit" onclick="prepareEdit('${item.title.replace(/'/g, "\\'")}', '${item.content.replace(/'/g, "\\'")}')">Edytuj</button><button class="btn-del" onclick="deletePost('${item.title.replace(/'/g, "\\'")}')">Usuń</button></div></div>`;
-                });
-            }
-            loadIPList();
-        }
-
-        async function loadIPList() {
-            const container = document.getElementById('ip-admin-container');
-            const { data } = await sb.from('bans').select('*');
-            if (data) {
-                container.innerHTML = data.map(b => `
-                    <div class="ip-row">
-                        IP: <b>${b.ip}</b> | Próby: ${b.attempts} | Ban: ${b.is_banned ? '<span style="color:red">TAK</span>' : 'NIE'}
-                    </div>
-                `).join('');
-            }
-        }
-
         async function saveLoginLog(ip) {
             if(!ip) return;
-            try {
-                await sb.from('logs').insert([{ ip: ip }]);
-            } catch (e) {
-                console.error("Błąd zapisu logów:", e);
+            // Próba zapisu - jeśli tabela logs ma ID autoincrement, to zadziała zawsze
+            const { error } = await sb.from('logs').insert([{ ip: ip }]);
+            if (error) console.error("Log Error:", error.message);
+        }
+
+        async function loadData() {
+            const { data: news } = await sb.from('news').select('*');
+            if (news) {
+                const userDiv = document.getElementById('news-container');
+                const adminDiv = document.getElementById('admin-list');
+                userDiv.innerHTML = news.length ? "" : "Brak wiadomości.";
+                adminDiv.innerHTML = "";
+                news.slice().reverse().forEach(item => {
+                    userDiv.innerHTML += `<div class="news-item"><b>${item.title}</b><p>${item.content}</p></div>`;
+                    adminDiv.innerHTML += `<div class="admin-item"><b>${item.title}</b><div class="admin-btns"><button class="btn-edit" onclick="prepareEdit('${item.title.replace(/'/g, "\\'")}', '${item.content.replace(/'/g, "\\Source")}')">Edytuj</button><button class="btn-del" onclick="deletePost('${item.title.replace(/'/g, "\\'")}')">Usuń</button></div></div>`;
+                });
             }
+            // Odśwież listy IP dla admina
+            const { data: bans } = await sb.from('bans').select('*');
+            if(bans) document.getElementById('ip-admin-container').innerHTML = bans.map(b => `<div class="ip-row">IP: ${b.ip} | Próby: ${b.attempts} | Ban: ${b.is_banned?'TAK':'NIE'}</div>`).join('');
+            
+            const { data: logs } = await sb.from('logs').select('*').order('created_at', {ascending: false}).limit(10);
+            if(logs) document.getElementById('logs-admin-container').innerHTML = logs.map(l => `<div class="ip-row">IP: ${l.ip} | ${new Date(l.created_at).toLocaleTimeString()}</div>`).join('');
         }
 
         async function checkAuth() {
             const p = document.getElementById('password-input').value;
-            if (p === "klucz") { 
-                show('section-user'); 
-                loadData(); 
-                saveLoginLog(userIP);
-            }
-            else if (p === "administracyjny") { 
-                show('section-admin'); 
-                loadData(); 
-                saveLoginLog(userIP);
-            }
+            if (p === "klucz") { show('section-user'); loadData(); saveLoginLog(userIP); }
+            else if (p === "administracyjny") { show('section-admin'); loadData(); saveLoginLog(userIP); }
             else { 
                 document.getElementById('error-msg').innerText = "Błędne hasło!";
                 if(userIP) {
                     const { data } = await sb.from('bans').select('attempts').eq('ip', userIP).maybeSingle();
-                    const newAttempts = (data ? data.attempts : 0) + 1;
-                    await sb.from('bans').update({ attempts: newAttempts }).eq('ip', userIP);
+                    await sb.from('bans').update({ attempts: (data?.attempts || 0) + 1 }).eq('ip', userIP);
                 }
             }
         }
 
         async function handleSave() {
-            const t = document.getElementById('post-title').value;
-            const c = document.getElementById('post-content').value;
+            const t = document.getElementById('post-title').value, c = document.getElementById('post-content').value;
             if(!t || !c) return;
-            if (editingTitle) { await sb.from('news').update({ title: t, content: c }).eq('title', editingTitle); }
-            else { await sb.from('news').insert([{ title: t, content: c }]); }
+            if (editingTitle) await sb.from('news').update({ title: t, content: c }).eq('title', editingTitle);
+            else await sb.from('news').insert([{ title: t, content: c }]);
             resetForm(); loadData();
         }
 
-        function prepareEdit(title, content) {
-            editingTitle = title;
-            document.getElementById('post-title').value = title;
-            document.getElementById('post-content').value = content;
-            document.getElementById('btn-save').innerText = "Zapisz zmiany";
-            document.getElementById('btn-cancel').classList.remove('hidden');
-        }
+        function prepareEdit(t, c) { editingTitle = t; document.getElementById('post-title').value = t; document.getElementById('post-content').value = c; document.getElementById('btn-save').innerText = "Zapisz"; document.getElementById('btn-cancel').classList.remove('hidden'); }
+        function resetForm() { editingTitle = null; document.getElementById('post-title').value = ""; document.getElementById('post-content').value = ""; document.getElementById('btn-save').innerText = "Opublikuj"; document.getElementById('btn-cancel').classList.add('hidden'); }
+        async function deletePost(t) { if (confirm("Usunąć?")) { await sb.from('news').delete().eq('title', t); loadData(); } }
+        function show(id) { document.querySelectorAll('.container').forEach(c => c.classList.add('hidden')); document.getElementById(id).classList.remove('hidden'); }
 
-        function resetForm() {
-            editingTitle = null;
-            document.getElementById('post-title').value = "";
-            document.getElementById('post-content').value = "";
-            document.getElementById('btn-save').innerText = "Opublikuj";
-            document.getElementById('btn-cancel').classList.add('hidden');
-        }
-
-        async function deletePost(title) {
-            if (confirm("Usunąć?")) { await sb.from('news').delete().eq('title', title); loadData(); }
-        }
-
-        function show(id) {
-            document.querySelectorAll('.container').forEach(c => c.classList.add('hidden'));
-            document.getElementById(id).classList.remove('hidden');
-        }
+        initSecurity();
     </script>
 </body>
 </html>
