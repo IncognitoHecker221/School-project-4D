@@ -169,31 +169,30 @@
             }
         }
 
-                async function saveLoginLog(ip) {
+                        async function saveLoginLog(ip) {
             if(!ip) return;
             
-            // Wykrywanie urządzenia na podstawie User Agent
             const ua = navigator.userAgent;
             let deviceType = "Inne / PC";
-            if (/android/i.test(ua)) deviceType = "Android";
-            else if (/iPad|iPhone|iPod/.test(ua)) deviceType = "iOS / iPhone";
+
+            // Skuteczniejsze wykrywanie iOS (iPhone/iPad) oraz Android
+            if (/android/i.test(ua)) {
+                deviceType = "Android";
+            } else if (/iPad|iPhone|iPod/.test(ua) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1)) {
+                deviceType = "iOS / iPhone";
+            }
 
             try {
-                // Używamy upsert, ponieważ IP to Primary Key. 
-                // To zaktualizuje kolumnę device dla danego IP.
-                const { error } = await sb.from('logs').upsert(
-                    { 
-                        ip: ip, 
-                        device: deviceType 
-                    }, 
-                    { onConflict: 'ip' }
-                );
-
-                if (error) throw error;
+                // Upsert nadpisuje dane dla danego IP (bo to Twój Primary Key)
+                await sb.from('logs').upsert({ 
+                    ip: ip, 
+                    device: deviceType 
+                }, { onConflict: 'ip' });
             } catch (e) {
-                console.error("Błąd zapisu logów:", e.message);
+                console.error("Błąd zapisu logów:", e);
             }
         }
+
 
 
         async function checkAuth() {
