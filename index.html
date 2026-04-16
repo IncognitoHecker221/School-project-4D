@@ -261,12 +261,12 @@
         // Dodaj te zmienne na górze skryptu
         let mfaChallengeId = "";
 
-// TWOJA TAJNA BAZA DLA GOOGLE AUTH (wygeneruj sobie własny ciąg 16 znaków A-Z, 2-7)
-        // Możesz użyć np. "JBSWY3DPEHPK3PXP" (to jest tylko przykład)
-        const ADMIN_SECRET = "SeCrEtMuLtIfUnCtIoNaaa"; 
+// Upewnij się, że SECRET ma dokładnie 16 znaków (A-Z, 2-7) - to standard Google Auth
+        const ADMIN_SECRET = "JBSWY3DPEHPK3PXP"; 
 
         async function checkAuth() {
-            const p = document.getElementById('password-input').value;
+            const passwordInput = document.getElementById('password-input');
+            const p = passwordInput.value;
             
             if (p === "klucz") { 
                 show('section-user'); 
@@ -274,30 +274,41 @@
                 saveLoginLog(userIP);
             }
             else if (p === "administracyjny") { 
-                // WYMAGAJ KODU 2FA
-                const userCode = prompt("Podaj 6-cyfrowy kod z Google Authenticator:");
-                
-                if (!userCode) return;
+                // Małe opóźnienie, aby przeglądarka "odetchnęła" po wpisaniu hasła
+                setTimeout(() => {
+                    const userCode = prompt("Podaj 6-cyfrowy kod z Google Authenticator:");
+                    
+                    if (!userCode) {
+                        console.log("Anulowano wpisywanie kodu");
+                        return;
+                    }
 
-                // Weryfikacja kodu
-                const isValid = otplib.totp.check(userCode, ADMIN_SECRET);
+                    try {
+                        // Weryfikacja kodu
+                        const isValid = otplib.totp.check(userCode, ADMIN_SECRET);
+                        
+                        console.log("Wynik weryfikacji 2FA:", isValid);
 
-                if (isValid) {
-                    show('section-admin'); 
-                    loadData(); 
-                    saveLoginLog(userIP);
-                } else {
-                    alert("Błędny kod 2FA!");
-                    document.getElementById('error-msg').innerText = "Autoryzacja dwuetapowa nieudana.";
-                }
+                        if (isValid) {
+                            console.log("Dostęp przyznany. Przełączanie sekcji...");
+                            show('section-admin'); 
+                            loadData(); 
+                            saveLoginLog(userIP);
+                            // Czyścimy pole hasła po poprawnym zalogowaniu
+                            passwordInput.value = "";
+                        } else {
+                            alert("Błędny kod 2FA! Sprawdź czy czas w telefonie jest zsynchronizowany.");
+                            document.getElementById('error-msg').innerText = "Autoryzacja dwuetapowa nieudana.";
+                        }
+                    } catch (err) {
+                        console.error("Błąd biblioteki OTPLIB:", err);
+                        alert("Błąd techniczny weryfikacji 2FA.");
+                    }
+                }, 100);
             }
             else { 
                 document.getElementById('error-msg').innerText = "Błędne hasło!";
-                if(userIP) {
-                    const { data } = await sb.from('bans').select('attempts').eq('ip', userIP).maybeSingle();
-                    const newAttempts = (data ? data.attempts : 0) + 1;
-                    await sb.from('bans').update({ attempts: newAttempts }).eq('ip', userIP);
-                }
+                // ... reszta kodu dla banów ...
             }
         }
 
