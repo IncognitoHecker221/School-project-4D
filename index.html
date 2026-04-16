@@ -142,6 +142,22 @@
 
         initSecurity();
 
+// Funkcja pomocnicza do zamiany tekstu na klikalne linki
+        function linkify(text) {
+            // RegEx wykrywający linki zaczynające się od http, https, www lub kończące się popularnymi domenami
+            const urlPattern = /(\b(https?|ftp|file):\/\/[-A-Z0-9+&@#\/%?=~_|!:,.;]*[-A-Z0-9+&@#\/%=~_|]|(www\.|[A-Z0-9.-]+\.(com|pl|net|org|me|gov|edu))[-A-Z0-9+&@#\/%?=~_|!:,.;]*[-A-Z0-9+&@#\/%=~_|])/ig;
+            
+            return text.replace(urlPattern, function(url) {
+                let href = url;
+                // Jeśli link nie ma protokołu (np. zaczyna się od facebook.pl), dodajemy https://
+                if (!href.match(/^https?:\/\//i)) {
+                    href = 'https://' + href;
+                }
+                // Target _blank otwiera link w nowej karcie, żeby nie zamykać Twojej strony
+                return `<a href="${href}" target="_blank" style="color: #0000FF; text-decoration: underline;">${url}</a>`;
+            });
+        }
+
         async function loadData() {
             const { data } = await sb.from('news').select('*');
             if (data) {
@@ -149,9 +165,26 @@
                 const adminDiv = document.getElementById('admin-list');
                 userDiv.innerHTML = data.length ? "" : "Brak wiadomości.";
                 adminDiv.innerHTML = "";
+
                 data.slice().reverse().forEach(item => {
-                    userDiv.innerHTML += `<div class="news-item"><b>${item.title}</b><p>${item.content}</p></div>`;
-                    adminDiv.innerHTML += `<div class="admin-item"><b>${item.title}</b><div class="admin-btns"><button class="btn-edit" onclick="prepareEdit('${item.title.replace(/'/g, "\\'")}', '${item.content.replace(/'/g, "\\'")}')">Edytuj</button><button class="btn-del" onclick="deletePost('${item.title.replace(/'/g, "\\'")}')">Usuń</button></div></div>`;
+                    // Tutaj używamy funkcji linkify dla tytułu i treści
+                    const linkedTitle = linkify(item.title);
+                    const linkedContent = linkify(item.content);
+
+                    userDiv.innerHTML += `
+                        <div class="news-item">
+                            <b>${linkedTitle}</b>
+                            <p>${linkedContent}</p>
+                        </div>`;
+
+                    adminDiv.innerHTML += `
+                        <div class="admin-item">
+                            <b>${item.title}</b>
+                            <div class="admin-btns">
+                                <button class="btn-edit" onclick="prepareEdit('${item.title.replace(/'/g, "\\'")}', '${item.content.replace(/'/g, "\\'")}')">Edytuj</button>
+                                <button class="btn-del" onclick="deletePost('${item.title.replace(/'/g, "\\'")}')">Usuń</button>
+                            </div>
+                        </div>`;
                 });
             }
             loadIPList();
