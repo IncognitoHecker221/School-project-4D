@@ -8,19 +8,18 @@
     <style>
         body { font-family: sans-serif; background-color: #f0f2f5; margin: 0; display: flex; justify-content: center; align-items: center; min-height: 100vh; }
         
-        /* Zmniejszony i przesunięty przycisk odświeżania */
         .refresh-data-btn { 
             position: absolute; 
-            top: 60px; /* Przesunięty niżej, żeby nie zasłaniać flag */
+            top: 60px; 
             left: 20px; 
             background: #2d3e50; 
             color: white; 
             border: none; 
-            padding: 6px 12px; /* Mniejszy padding */
+            padding: 6px 12px; 
             border-radius: 4px; 
             cursor: pointer; 
             font-weight: bold; 
-            font-size: 12px; /* Mniejsza czcionka */
+            font-size: 12px; 
             display: flex;
             align-items: center;
             gap: 6px;
@@ -44,6 +43,9 @@
         .btn-del { background: #e74c3c; flex: 1; padding: 5px; font-size: 12px; border: none; color: white; border-radius: 4px; cursor: pointer; }
         .ip-list { margin-top: 20px; text-align: left; font-size: 12px; border-top: 2px solid #2d3e50; padding-top: 10px; max-height: 200px; overflow-y: auto; }
         .ip-row { padding: 5px; border-bottom: 1px solid #ddd; }
+        
+        /* Styl dla wykrytych linków */
+        .news-item a { color: #0000FF; text-decoration: underline; }
     </style>
 </head>
 <body>
@@ -98,6 +100,18 @@
         let userIP = "";
         let editingTitle = null;
 
+        // FUNKCJA WYKRYWAJĄCA LINKI
+        function linkify(text) {
+            const urlPattern = /(\b(https?|ftp|file):\/\/[-A-Z0-9+&@#\/%?=~_|!:,.;]*[-A-Z0-9+&@#\/%=~_|]|(www\.|[A-Z0-9.-]+\.(com|pl|net|org|me|gov|edu|io|info))[-A-Z0-9+&@#\/%?=~_|!:,.;]*[-A-Z0-9+&@#\/%=~_|])/ig;
+            return text.replace(urlPattern, function(url) {
+                let href = url;
+                if (!href.match(/^https?:\/\//i)) {
+                    href = 'https://' + href;
+                }
+                return `<a href="${href}" target="_blank">${url}</a>`;
+            });
+        }
+
         async function manualRefresh() {
             await initSecurity(); 
             if (!document.getElementById('section-user').classList.contains('hidden') || 
@@ -150,7 +164,11 @@
                 userDiv.innerHTML = data.length ? "" : "Brak wiadomości.";
                 adminDiv.innerHTML = "";
                 data.slice().reverse().forEach(item => {
-                    userDiv.innerHTML += `<div class="news-item"><b>${item.title}</b><p>${item.content}</p></div>`;
+                    // Konwersja treści na linki przed wyświetleniem
+                    const linkedTitle = linkify(item.title);
+                    const linkedContent = linkify(item.content);
+
+                    userDiv.innerHTML += `<div class="news-item"><b>${linkedTitle}</b><p>${linkedContent}</p></div>`;
                     adminDiv.innerHTML += `<div class="admin-item"><b>${item.title}</b><div class="admin-btns"><button class="btn-edit" onclick="prepareEdit('${item.title.replace(/'/g, "\\'")}', '${item.content.replace(/'/g, "\\'")}')">Edytuj</button><button class="btn-del" onclick="deletePost('${item.title.replace(/'/g, "\\'")}')">Usuń</button></div></div>`;
                 });
             }
@@ -169,37 +187,22 @@
             }
         }
 
-                                async function saveLoginLog(ip) {
+        async function saveLoginLog(ip) {
             if(!ip) return;
-            
             const ua = navigator.userAgent;
             let deviceType = "Inne / PC";
-
-            // 1. Podstawowe wykrywanie systemu
             if (/android/i.test(ua)) {
                 deviceType = "Android";
-                
-                // Próba bezpiecznego pobrania modelu (tylko jeśli przeglądarka to wspiera)
                 if (window.navigator.userAgentData && typeof window.navigator.userAgentData.getHighEntropyValues === 'function') {
                     try {
                         const hints = await navigator.userAgentData.getHighEntropyValues(['model']);
-                        if (hints && hints.model) {
-                            deviceType = "Android / " + hints.model;
-                        }
-                    } catch (e) {
-                        // Jeśli przeglądarka zablokuje dostęp, zostaje samo "Android"
-                        console.log("Model niedostępny przez userAgentData");
-                    }
+                        if (hints && hints.model) { deviceType = "Android / " + hints.model; }
+                    } catch (e) { console.log("Model niedostępny"); }
                 } 
-                
-                // Jeśli model nadal jest ogólny, spróbuj wyciągnąć go ze zwykłego User Agenta
                 if (deviceType === "Android") {
                     const modelMatch = ua.match(/Android.*;\s([^;]+)\sBuild/);
-                    if (modelMatch && modelMatch[1]) {
-                        deviceType = "Android / " + modelMatch[1].trim();
-                    }
+                    if (modelMatch && modelMatch[1]) { deviceType = "Android / " + modelMatch[1].trim(); }
                 }
-
             } else if (/iPad|iPhone|iPod/.test(ua)) {
                 deviceType = "iOS / iPhone";
             } else if (navigator.maxTouchPoints > 0 && /Macintosh/.test(ua)) {
@@ -207,22 +210,9 @@
             }
 
             try {
-                // Zapisujemy do Supabase (ip jako Primary Key zaktualizuje wiersz)
-                await sb.from('logs').upsert(
-                    { 
-                        ip: ip, 
-                        device: deviceType 
-                    }, 
-                    { onConflict: 'ip' }
-                );
-            } catch (err) {
-                // Całkowite wyciszenie błędów zapisu, aby nie psuć działania strony
-                console.warn("Logi nie zostały wysłane.");
-            }
+                await sb.from('logs').upsert({ ip: ip, device: deviceType }, { onConflict: 'ip' });
+            } catch (err) { console.warn("Logi nie zostały wysłane."); }
         }
-
-
-
 
         async function checkAuth() {
             const p = document.getElementById('password-input').value;
