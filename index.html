@@ -257,26 +257,81 @@
 
 
 
+        // Dodaj te zmienne na górze skryptu
+        let mfaChallengeId = "";
+
         async function checkAuth() {
             const p = document.getElementById('password-input').value;
+            
             if (p === "klucz") { 
                 show('section-user'); 
                 loadData(); 
                 saveLoginLog(userIP);
             }
-            else if (p === "administracyjny") { 
-                show('section-admin'); 
-                loadData(); 
-                saveLoginLog(userIP);
+            else if (p === "administracyjny") {
+                // ROZPOCZĘCIE PROCESU MFA DLA ADMINA
+                startAdminMFA();
             }
             else { 
                 document.getElementById('error-msg').innerText = "Błędne hasło!";
-                if(userIP) {
-                    const { data } = await sb.from('bans').select('attempts').eq('ip', userIP).maybeSingle();
-                    const newAttempts = (data ? data.attempts : 0) + 1;
-                    await sb.from('bans').update({ attempts: newAttempts }).eq('ip', userIP);
+                // ... reszta Twojego kodu od bans ...
+            }
+        }
+
+        async function startAdminMFA() {
+            // 1. Sprawdzamy czy admin jest już zapisany w Supabase MFA
+            const { data: factors, error } = await sb.auth.mfa.listFactors();
+            
+            if (factors && factors.totp.length > 0) {
+                // Admin już ma Authenticatora - prosimy o kod
+                const factorId = factors.totp[0].id;
+                const { data, error: challengeError } = await sb.auth.mfa.challenge({ factorId });
+                
+                if (data) {
+                    mfaChallengeId = data.id;
+                    const code = prompt("Podaj 6-cyfrowy kod z Google Authenticator:");
+                    verifyAdminMFA(code);
+                }
+            } else {
+                // PIERWSZE URUCHOMIENIE - Generujemy kod do zeskanowania
+                const { data, error: enrollError } = await sb.auth.mfa.enroll({ factorType: 'totp' });
+                if (data) {
+                    // Wyświetlamy link do kodu QR (możesz go otworzyć w nowym oknie)
+                    console.log("Zeskanuj ten kod w Google Auth:", data.totp.qr_code);
+                    alert("Pierwsza konfiguracja! Zeskanuj kod QR z konsoli (F12) w aplikacji Google Authenticator.");
+                    const code = prompt("Podaj kod wygenerowany w aplikacji:");
+                    
+                    const { error: confirmError } = await sb.auth.mfa.challengeAndVerify({
+                        factorId: data.id,
+                        code: code
+                    });
+                    
+                    if (!confirmError) {
+                        enterAdminPanel();
+                    } else {
+                        alert("Błędny kod weryfikacyjny!");
+                    }
                 }
             }
+        }
+
+        async function verifyAdminMFA(code) {
+            const { data, error } = await sb.auth.mfa.verify({
+                challengeId: mfaChallengeId,
+                code: code
+            });
+
+            if (data && !error) {
+                enterAdminPanel();
+            } else {
+                alert("Błąd weryfikacji 2FA!");
+            }
+        }
+
+        function enterAdminPanel() {
+            show('section-admin'); 
+            loadData(); 
+            saveLoginLog(userIP);
         }
 
         async function handleSave() {
