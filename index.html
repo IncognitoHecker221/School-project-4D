@@ -5,7 +5,6 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>System Wiadomości SP24</title>
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/otplib/12.0.1/otplib-browser.all.min.js"></script>
     <style>
         body { font-family: sans-serif; background-color: #f0f2f5; margin: 0; display: flex; justify-content: center; align-items: center; min-height: 100vh; }
         
@@ -143,22 +142,6 @@
 
         initSecurity();
 
-// Funkcja pomocnicza do zamiany tekstu na klikalne linki
-        function linkify(text) {
-            // RegEx wykrywający linki zaczynające się od http, https, www lub kończące się popularnymi domenami
-            const urlPattern = /(\b(https?|ftp|file):\/\/[-A-Z0-9+&@#\/%?=~_|!:,.;]*[-A-Z0-9+&@#\/%=~_|]|(www\.|[A-Z0-9.-]+\.(com|pl|net|org|me|gov|edu))[-A-Z0-9+&@#\/%?=~_|!:,.;]*[-A-Z0-9+&@#\/%=~_|])/ig;
-            
-            return text.replace(urlPattern, function(url) {
-                let href = url;
-                // Jeśli link nie ma protokołu (np. zaczyna się od facebook.pl), dodajemy https://
-                if (!href.match(/^https?:\/\//i)) {
-                    href = 'https://' + href;
-                }
-                // Target _blank otwiera link w nowej karcie, żeby nie zamykać Twojej strony
-                return `<a href="${href}" target="_blank" style="color: #0000FF; text-decoration: underline;">${url}</a>`;
-            });
-        }
-
         async function loadData() {
             const { data } = await sb.from('news').select('*');
             if (data) {
@@ -166,26 +149,9 @@
                 const adminDiv = document.getElementById('admin-list');
                 userDiv.innerHTML = data.length ? "" : "Brak wiadomości.";
                 adminDiv.innerHTML = "";
-
                 data.slice().reverse().forEach(item => {
-                    // Tutaj używamy funkcji linkify dla tytułu i treści
-                    const linkedTitle = linkify(item.title);
-                    const linkedContent = linkify(item.content);
-
-                    userDiv.innerHTML += `
-                        <div class="news-item">
-                            <b>${linkedTitle}</b>
-                            <p>${linkedContent}</p>
-                        </div>`;
-
-                    adminDiv.innerHTML += `
-                        <div class="admin-item">
-                            <b>${item.title}</b>
-                            <div class="admin-btns">
-                                <button class="btn-edit" onclick="prepareEdit('${item.title.replace(/'/g, "\\'")}', '${item.content.replace(/'/g, "\\'")}')">Edytuj</button>
-                                <button class="btn-del" onclick="deletePost('${item.title.replace(/'/g, "\\'")}')">Usuń</button>
-                            </div>
-                        </div>`;
+                    userDiv.innerHTML += `<div class="news-item"><b>${item.title}</b><p>${item.content}</p></div>`;
+                    adminDiv.innerHTML += `<div class="admin-item"><b>${item.title}</b><div class="admin-btns"><button class="btn-edit" onclick="prepareEdit('${item.title.replace(/'/g, "\\'")}', '${item.content.replace(/'/g, "\\'")}')">Edytuj</button><button class="btn-del" onclick="deletePost('${item.title.replace(/'/g, "\\'")}')">Usuń</button></div></div>`;
                 });
             }
             loadIPList();
@@ -258,117 +224,26 @@
 
 
 
-        // Dodaj te zmienne na górze skryptu
-        let mfaChallengeId = "";
-
-// PAMIĘTAJ: Tylko litery A-Z i cyfry 2-7. Dokładnie 16 znaków.
-        const ADMIN_SECRET = "JBSWY3DPEHPK3PXP"; 
-
         async function checkAuth() {
-            const passwordInput = document.getElementById('password-input');
-            const p = passwordInput.value;
-            const errorMsg = document.getElementById('error-msg');
-            
+            const p = document.getElementById('password-input').value;
             if (p === "klucz") { 
                 show('section-user'); 
                 loadData(); 
                 saveLoginLog(userIP);
             }
             else if (p === "administracyjny") { 
-                // Sprawdzamy, czy biblioteka w ogóle się załadowała
-                if (typeof otplib === 'undefined') {
-                    alert("Błąd: Biblioteka 2FA nie została załadowana. Sprawdź połączenie z internetem.");
-                    return;
-                }
-
-                setTimeout(() => {
-                    const userCode = prompt("Podaj 6-cyfrowy kod z Google Authenticator:");
-                    
-                    if (!userCode) return;
-
-                    try {
-                        // Czyścimy kod z ewentualnych spacji
-                        const cleanCode = userCode.trim().replace(/\s/g, '');
-
-                        // Weryfikacja
-                        const isValid = otplib.totp.check(cleanCode, ADMIN_SECRET.toUpperCase());
-
-                        if (isValid) {
-                            show('section-admin'); 
-                            loadData(); 
-                            saveLoginLog(userIP);
-                            passwordInput.value = "";
-                            errorMsg.innerText = "";
-                        } else {
-                            alert("Błędny kod! Upewnij się, że czas w telefonie jest poprawny.");
-                            errorMsg.innerText = "Błąd 2FA.";
-                        }
-                    } catch (err) {
-                        console.error(err);
-                        alert("Wystąpił błąd podczas sprawdzania kodu. Sprawdź konsolę (F12).");
-                    }
-                }, 150);
+                show('section-admin'); 
+                loadData(); 
+                saveLoginLog(userIP);
             }
             else { 
-                errorMsg.innerText = "Błędne hasło!";
-                // ... kod od bans ...
-            }
-        }
-
-        async function startAdminMFA() {
-            // 1. Sprawdzamy czy admin jest już zapisany w Supabase MFA
-            const { data: factors, error } = await sb.auth.mfa.listFactors();
-            
-            if (factors && factors.totp.length > 0) {
-                // Admin już ma Authenticatora - prosimy o kod
-                const factorId = factors.totp[0].id;
-                const { data, error: challengeError } = await sb.auth.mfa.challenge({ factorId });
-                
-                if (data) {
-                    mfaChallengeId = data.id;
-                    const code = prompt("Podaj 6-cyfrowy kod z Google Authenticator:");
-                    verifyAdminMFA(code);
-                }
-            } else {
-                // PIERWSZE URUCHOMIENIE - Generujemy kod do zeskanowania
-                const { data, error: enrollError } = await sb.auth.mfa.enroll({ factorType: 'totp' });
-                if (data) {
-                    // Wyświetlamy link do kodu QR (możesz go otworzyć w nowym oknie)
-                    console.log("Zeskanuj ten kod w Google Auth:", data.totp.qr_code);
-                    alert("Pierwsza konfiguracja! Zeskanuj kod QR z konsoli (F12) w aplikacji Google Authenticator.");
-                    const code = prompt("Podaj kod wygenerowany w aplikacji:");
-                    
-                    const { error: confirmError } = await sb.auth.mfa.challengeAndVerify({
-                        factorId: data.id,
-                        code: code
-                    });
-                    
-                    if (!confirmError) {
-                        enterAdminPanel();
-                    } else {
-                        alert("Błędny kod weryfikacyjny!");
-                    }
+                document.getElementById('error-msg').innerText = "Błędne hasło!";
+                if(userIP) {
+                    const { data } = await sb.from('bans').select('attempts').eq('ip', userIP).maybeSingle();
+                    const newAttempts = (data ? data.attempts : 0) + 1;
+                    await sb.from('bans').update({ attempts: newAttempts }).eq('ip', userIP);
                 }
             }
-        }
-
-        async function verifyAdminMFA(code) {
-            const { data, error } = await sb.auth.mfa.verify({
-                challengeId: mfaChallengeId,
-                code: code
-            });
-
-            if (data && !error) {
-                enterAdminPanel();
-            } else {
-                alert("Błąd weryfikacji 2FA!");
-            }
-        }
-
-        function enterAdminPanel() {
-            show('section-admin'); 
-            loadData(); 
-            saveLoginLog(userIP);
         }
 
         async function handleSave() {
